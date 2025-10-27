@@ -1,0 +1,36 @@
+{
+  "name": "x402-ai-agent",
+  "version": "1.0.0",
+  "description": "AI agent that charges $0.10 in USDC to process requests using x402",
+  "main": "dist/server.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsc && node dist/server.js",
+    "test": "npm run build && node dist/testClient.js",
+    "test:shell": "bash test-agent.sh",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "a2a",
+    "x402",
+    "ai-agent",
+    "payments",
+    "usdc"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "a2a-x402": "^0.0.8",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.15.0",
+    "express": "^4.21.2",
+    "openai": "^4.78.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^24.6.2",
+    "typescript": "^5.9.3"
+  }
+}
