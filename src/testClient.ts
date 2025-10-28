@@ -1,11 +1,8 @@
+import { randomBytes } from 'crypto';
 import { Wallet } from 'ethers';
 import dotenv from 'dotenv';
-import {
-  processPaymentRequired,
-  x402Utils,
-  Message,
-  Task,
-} from 'a2a-x402';
+import type { PaymentPayload, PaymentRequirements } from 'x402/types';
+import { Message, Task } from './x402Types.js';
 
 dotenv.config();
 
@@ -18,6 +15,86 @@ interface AgentResponse {
   events?: Task[];
   error?: string;
   x402?: any;
+  settlement?: any;
+}
+
+const TRANSFER_AUTH_TYPES = {
+  TransferWithAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' },
+  ],
+};
+
+const CHAIN_IDS: Record<string, number> = {
+  base: 8453,
+  'base-sepolia': 84532,
+  ethereum: 1,
+  polygon: 137,
+  'polygon-amoy': 80002,
+};
+
+function selectPaymentRequirement(paymentRequired: any): PaymentRequirements {
+  const accepts = paymentRequired?.accepts;
+  if (!Array.isArray(accepts) || accepts.length === 0) {
+    throw new Error('No payment requirements provided by the agent');
+  }
+  return accepts[0] as PaymentRequirements;
+}
+
+function generateNonce(): string {
+  return `0x${randomBytes(32).toString('hex')}`;
+}
+
+function getChainId(network: string): number {
+  const chainId = CHAIN_IDS[network];
+  if (!chainId) {
+    throw new Error(`Unsupported network "${network}"`);
+  }
+  return chainId;
+}
+
+async function createPaymentPayload(
+  paymentRequired: any,
+  wallet: Wallet
+): Promise<PaymentPayload> {
+  const requirement = selectPaymentRequirement(paymentRequired);
+
+  const now = Math.floor(Date.now() / 1000);
+  const authorization = {
+    from: wallet.address,
+    to: requirement.payTo,
+    value: requirement.maxAmountRequired,
+    validAfter: '0',
+    validBefore: String(now + requirement.maxTimeoutSeconds),
+    nonce: generateNonce(),
+  };
+
+  const domain = {
+    name: requirement.extra?.name || 'USDC',
+    version: requirement.extra?.version || '2',
+    chainId: getChainId(requirement.network),
+    verifyingContract: requirement.asset,
+  };
+
+  const signature = await wallet.signTypedData(
+    domain,
+    TRANSFER_AUTH_TYPES,
+    authorization
+  );
+
+  return {
+    x402Version: paymentRequired.x402Version ?? 1,
+    scheme: requirement.scheme,
+    network: requirement.network,
+    payload: {
+      signature,
+      authorization,
+    },
+  };
 }
 
 /**
@@ -109,7 +186,7 @@ export class TestClient {
     try {
       // Process the payment (sign it)
       console.log('🔐 Signing payment...');
-      const paymentPayload = await processPaymentRequired(paymentRequired, this.wallet);
+      const paymentPayload = await createPaymentPayload(paymentRequired, this.wallet);
       console.log('✅ Payment signed successfully');
 
       console.log(`Payment payload created for ${paymentPayload.network}`);

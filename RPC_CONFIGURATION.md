@@ -94,60 +94,19 @@ If you want to bypass the facilitator and interact with the blockchain directly,
 
 Example custom facilitator:
 
+Our reference implementation (`src/MerchantExecutor.ts`) already handles this by using the core `x402` types together with `ethers`:
+
+- If you set `PRIVATE_KEY` (and optionally `RPC_URL`), the agent verifies the EIP-3009 payload locally and submits `transferWithAuthorization` directly to USDC.
+- If you omit those variables, the server will still verify signatures but will skip settlement (so you can plug in your own flow).
+
+Use this file as a starting point if you want to customise the behaviour (e.g. support additional assets or add logging). The implementation relies on:
+
 ```typescript
-// CustomFacilitator.ts
+import type { PaymentPayload, PaymentRequirements, VerifyResponse, SettleResponse } from 'x402/types';
 import { ethers } from 'ethers';
-import { FacilitatorClient, PaymentPayload, PaymentRequirements, VerifyResponse, SettleResponse } from 'a2a-x402';
-
-export class CustomFacilitator implements FacilitatorClient {
-  private provider: ethers.JsonRpcProvider;
-  private wallet: ethers.Wallet;
-
-  constructor(rpcUrl: string, privateKey: string) {
-    this.provider = new ethers.JsonRpcProvider(rpcUrl);
-    this.wallet = new ethers.Wallet(privateKey, this.provider);
-  }
-
-  async verify(payload: PaymentPayload, requirements: PaymentRequirements): Promise<VerifyResponse> {
-    // Custom verification logic
-    // - Verify EIP-3009 signature
-    // - Check USDC balance and allowance
-    // - Validate authorization parameters
-
-    return {
-      isValid: true,
-      payer: payload.payload.authorization.from,
-    };
-  }
-
-  async settle(payload: PaymentPayload, requirements: PaymentRequirements): Promise<SettleResponse> {
-    // Custom settlement logic
-    // - Execute EIP-3009 transferWithAuthorization
-    // - Wait for transaction confirmation
-    // - Return transaction hash
-
-    return {
-      success: true,
-      transaction: '0x...',
-      network: requirements.network,
-      payer: payload.payload.authorization.from,
-    };
-  }
-}
 ```
 
-Then in `server.ts`:
-
-```typescript
-import { CustomFacilitator } from './CustomFacilitator.js';
-
-const facilitator = new CustomFacilitator(
-  process.env.RPC_URL!,
-  process.env.PRIVATE_KEY!
-);
-
-const merchantExecutor = new MerchantExecutor(simpleAgent, undefined, facilitator);
-```
+From there you can adapt the verification/settlement helpers to fit your architecture.
 
 ## RPC Providers
 

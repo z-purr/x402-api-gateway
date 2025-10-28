@@ -1,16 +1,11 @@
 import OpenAI from 'openai';
-import {
-  AgentExecutor,
-  RequestContext,
-  EventQueue,
-  x402PaymentRequiredException,
-} from 'a2a-x402';
+import { EventQueue, RequestContext, TaskState } from './x402Types.js';
 
 /**
  * SimpleAgent is an AI agent that processes user requests using OpenAI
- * It requires payment before processing requests
+ * Payment validation is handled by the server before invoking this agent
  */
-export class SimpleAgent implements AgentExecutor {
+export class SimpleAgent {
   private openai: OpenAI;
   private payToAddress: string;
   private network: string;
@@ -27,24 +22,6 @@ export class SimpleAgent implements AgentExecutor {
     if (!task) {
       throw new Error('No task found in context');
     }
-
-    // Check if payment has been verified
-    const paymentVerified = task.metadata?.['x402_payment_verified'];
-
-    if (!paymentVerified) {
-      // Payment not verified - require payment
-      console.log('💰 Payment required for request processing');
-
-      throw await x402PaymentRequiredException.forService({
-        price: '$0.10',
-        payToAddress: this.payToAddress,
-        resource: '/process-request',
-        network: this.network as any,
-        description: 'AI request processing service',
-      });
-    }
-
-    // Payment verified - process the request
     console.log('✅ Payment verified, processing request...');
 
     // Extract user message from the context
@@ -78,7 +55,7 @@ export class SimpleAgent implements AgentExecutor {
       console.log(`🤖 AI response: ${response}`);
 
       // Update task with the response
-      task.status.state = 'completed' as any;
+      task.status.state = TaskState.COMPLETED;
       task.status.message = {
         messageId: `msg-${Date.now()}`,
         role: 'agent',
@@ -98,7 +75,7 @@ export class SimpleAgent implements AgentExecutor {
       console.error('❌ Error processing request:', error);
 
       // Update task with error
-      task.status.state = 'failed' as any;
+      task.status.state = TaskState.FAILED;
       task.status.message = {
         messageId: `msg-${Date.now()}`,
         role: 'agent',

@@ -13,12 +13,11 @@ This agent demonstrates how to integrate x402 payments with an AI service. It:
 
 ## Architecture
 
-The agent consists of four main components:
+The agent consists of three main components:
 
 - **SimpleAgent**: Core agent logic that processes requests using OpenAI
-- **MerchantExecutor**: Payment handling layer that extends `x402ServerExecutor`
-- **CustomFacilitatorClient**: Enhanced facilitator client with redirect handling and debugging
-- **Server**: Express HTTP server that exposes the agent endpoints
+- **MerchantExecutor**: Handles payment verification and settlement using `x402` types with direct EIP-3009 settlement via `ethers`
+- **Server**: Express HTTP server that orchestrates payment validation and request processing
 
 ## Prerequisites
 
@@ -65,16 +64,8 @@ NETWORK=base-sepolia
 # Your OpenAI API key for AI processing
 OPENAI_API_KEY=your_openai_api_key_here
 
-# Optional: Custom Facilitator URL
-# Default: https://x402.org/facilitator
-# Set this if you want to use a custom facilitator or local instance
-# FACILITATOR_URL=https://your-facilitator.com
-
-# Optional: Facilitator API Key
-# FACILITATOR_API_KEY=your_api_key
-
 # Optional: RPC URL for direct blockchain interaction
-# Set this (along with PRIVATE_KEY) to enable direct settlement without the hosted facilitator.
+# Set this (along with PRIVATE_KEY) to enable direct settlement.
 # If omitted and NETWORK is "base" or "base-sepolia", the agent will use Coinbase's public RPC.
 # RPC_URL=https://base-sepolia.g.alchemy.com/v2/your-api-key
 
@@ -88,10 +79,9 @@ X402_DEBUG=true
 - Never commit your `.env` file to version control
 
 **Direct Settlement:**
-- If you set `PRIVATE_KEY` (and optionally `RPC_URL`), the agent bypasses the hosted facilitator
-- It will verify the EIP-3009 signature locally with `ethers` and call `transferWithAuthorization()` on the USDC contract directly
+- If you set `PRIVATE_KEY` (and optionally `RPC_URL`), the agent verifies the EIP-3009 signature locally with `ethers` and calls `transferWithAuthorization()` on the USDC contract directly
 - If `RPC_URL` is omitted, the agent will use public RPC endpoints for Base/Base Sepolia
-- Remove `PRIVATE_KEY` to continue using the default facilitator
+- Omit `PRIVATE_KEY` to disable automatic settlement (payments remain verified but you can plug in your own settlement flow)
 
 ## Running the Agent
 
@@ -230,7 +220,7 @@ To complete the payment and process the request, you'll need to:
 2. Sign the payment with your wallet
 3. Submit the payment back to the `/process` endpoint
 
-For a complete client example, see the a2a-x402 library documentation.
+For a complete client example, see the [`x402` library documentation](https://www.npmjs.com/package/x402).
 
 ## How It Works
 
@@ -247,11 +237,7 @@ For a complete client example, see the a2a-x402 library documentation.
 
 ### Payment Verification
 
-The agent uses the x402 default facilitator (`https://x402.org/facilitator`) to:
-
-- Verify payment signatures
-- Check USDC allowances
-- Execute the transfer on-chain
+`src/MerchantExecutor.ts` validates the EIP-3009 payload locally (using types from the `x402` package) before the request is processed. When a merchant private key is configured it also submits `transferWithAuthorization` on-chain via `ethers`, returning the resulting transaction hash for reference.
 
 ### Error Handling
 
@@ -269,8 +255,8 @@ agent/
 ├── src/
 │   ├── server.ts                     # Express server and endpoints
 │   ├── SimpleAgent.ts                # AI agent logic
-│   ├── MerchantExecutor.ts           # Payment handling
-│   ├── CustomFacilitatorClient.ts    # Enhanced facilitator client
+│   ├── MerchantExecutor.ts           # Payment verification & settlement helpers
+│   ├── x402Types.ts                  # Shared task/message types
 │   └── testClient.ts                 # Test client for development
 ├── package.json
 ├── tsconfig.json
@@ -318,8 +304,8 @@ Make sure you've set `PAY_TO_ADDRESS` in your `.env` file to your wallet address
 - Check that you're using the correct network
 - Verify your wallet has USDC approval set
 - Make sure the payment amount matches ($0.10)
-- If the hosted facilitator returns `invalid_payload`, set `PRIVATE_KEY` and optionally `RPC_URL` to enable direct settlement
-- To use a custom facilitator, set `FACILITATOR_URL` and optionally `FACILITATOR_API_KEY`
+- If signature verification fails, review the logged invalid reason and confirm the client signed the latest payment requirements
+- For settlement errors, ensure `PRIVATE_KEY` (and optionally `RPC_URL`) are set, or integrate a custom settlement flow tailored to your infrastructure
 
 ### OpenAI rate limits
 
@@ -352,6 +338,6 @@ ISC
 
 ## Resources
 
-- [a2a-x402 Package on npm](https://www.npmjs.com/package/a2a-x402)
+- [x402 Package on npm](https://www.npmjs.com/package/x402)
 - [A2A Specification](https://github.com/google/a2a)
 - [OpenAI API Documentation](https://platform.openai.com/docs)

@@ -5,7 +5,7 @@
  * Prerequisites:
  * - Set CLIENT_PRIVATE_KEY in .env
  * - Test wallet must have USDC and gas tokens
- * - USDC approval must be set for the facilitator
+ * - PRIVATE_KEY configured in the agent for settlement (or manual follow-up)
  */
 
 import { TestClient } from '../src/testClient.js';
@@ -21,7 +21,7 @@ async function paidTest() {
     console.log('\nTo test with payments:');
     console.log('1. Add CLIENT_PRIVATE_KEY=your_private_key to .env');
     console.log('2. Ensure wallet has USDC and gas tokens');
-    console.log('3. Set USDC approval for the facilitator');
+    console.log('3. (Optional) Provide RPC_URL if you prefer a custom provider');
     process.exit(1);
   }
 

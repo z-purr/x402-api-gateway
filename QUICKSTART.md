@@ -131,7 +131,7 @@ PORT=3001
 ## Next Steps
 
 - Read the [full README](./README.md) for detailed documentation
-- Check the [a2a-x402 package](https://www.npmjs.com/package/a2a-x402) for payment integration
+- Check the [x402 package](https://www.npmjs.com/package/x402) for payment integration
 - Build a client to interact with your agent
 - Deploy to production
 
@@ -139,7 +139,7 @@ PORT=3001
 
 For issues or questions:
 - Check the README.md
-- Review the a2a-x402 library docs
+- Review the x402 library docs
 - Open an issue on GitHub
 
 Happy building! 🚀

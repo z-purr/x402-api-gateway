@@ -1,16 +1,15 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { SimpleAgent } from './SimpleAgent.js';
-import { MerchantExecutor } from './MerchantExecutor.js';
-import { CustomFacilitatorClient } from './CustomFacilitatorClient.js';
+import { MerchantExecutor, type MerchantExecutorOptions } from './MerchantExecutor.js';
+import type { PaymentPayload } from 'x402/types';
 import {
-  RequestContext,
   EventQueue,
-  Task,
   Message,
+  RequestContext,
+  Task,
   TaskState,
-  FacilitatorClient,
-} from 'a2a-x402';
+} from './x402Types.js';
 
 // Load environment variables
 dotenv.config();
@@ -24,14 +23,7 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const PAY_TO_ADDRESS = process.env.PAY_TO_ADDRESS;
 const NETWORK = process.env.NETWORK || 'base-sepolia';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const FACILITATOR_URL = process.env.FACILITATOR_URL;
-const FACILITATOR_API_KEY = process.env.FACILITATOR_API_KEY;
 const RPC_URL = process.env.RPC_URL;
-
-const DEFAULT_RPC_BY_NETWORK: Record<string, string> = {
-  base: 'https://mainnet.base.org',
-  'base-sepolia': 'https://sepolia.base.org',
-};
 
 // Validate environment variables
 if (!OPENAI_API_KEY) {
@@ -44,53 +36,48 @@ if (!PAY_TO_ADDRESS) {
   process.exit(1);
 }
 
-// Initialize facilitator with custom client that handles redirects properly
-const facilitator: FacilitatorClient = new CustomFacilitatorClient({
-  url: FACILITATOR_URL || 'https://x402.org/facilitator',
-  apiKey: FACILITATOR_API_KEY,
-});
-
-if (FACILITATOR_URL) {
-  console.log(`🔧 Using custom facilitator: ${FACILITATOR_URL}`);
-} else {
-  console.log('🔧 Using default facilitator: https://x402.org/facilitator');
+const SUPPORTED_NETWORKS = ['base', 'base-sepolia', 'polygon', 'polygon-amoy'] as const;
+if (!SUPPORTED_NETWORKS.includes(NETWORK as any)) {
+  console.warn(
+    `⚠️  Network "${NETWORK}" is not explicitly supported. Falling back to "base-sepolia".`
+  );
 }
+
+const resolvedNetwork = SUPPORTED_NETWORKS.includes(NETWORK as any)
+  ? (NETWORK as (typeof SUPPORTED_NETWORKS)[number])
+  : ('base-sepolia' as (typeof SUPPORTED_NETWORKS)[number]);
 
 // Initialize the agent stack
-const simpleAgent = new SimpleAgent(OPENAI_API_KEY, PAY_TO_ADDRESS, NETWORK);
-const resolvedRpcUrl =
-  PRIVATE_KEY && (RPC_URL || DEFAULT_RPC_BY_NETWORK[NETWORK as keyof typeof DEFAULT_RPC_BY_NETWORK]);
+const simpleAgent = new SimpleAgent(OPENAI_API_KEY, PAY_TO_ADDRESS, resolvedNetwork);
 
-const directSettlementConfig =
-  PRIVATE_KEY && resolvedRpcUrl
-    ? {
-        privateKey: PRIVATE_KEY,
-        rpcUrl: resolvedRpcUrl,
-      }
-    : undefined;
+const merchantOptions: MerchantExecutorOptions = {
+  payToAddress: PAY_TO_ADDRESS,
+  network: resolvedNetwork,
+  price: 0.1,
+  rpcUrl: RPC_URL,
+  privateKey: PRIVATE_KEY,
+};
 
-if (directSettlementConfig) {
-  if (!RPC_URL && DEFAULT_RPC_BY_NETWORK[NETWORK as keyof typeof DEFAULT_RPC_BY_NETWORK]) {
-    console.log(
-      `⚡ Direct settlement enabled using default RPC for ${NETWORK}: ${DEFAULT_RPC_BY_NETWORK[NETWORK as keyof typeof DEFAULT_RPC_BY_NETWORK]}`
-    );
+const merchantExecutor = new MerchantExecutor(merchantOptions);
+const paymentRequirements = merchantExecutor.getPaymentRequirements();
+
+if (PRIVATE_KEY) {
+  if (!RPC_URL) {
+    console.log('⚡ Direct settlement enabled (using default RPC endpoint)');
   } else {
-    console.log('⚡ Direct settlement enabled (RPC + merchant key configured)');
+    console.log('⚡ Direct settlement enabled (custom RPC provided)');
   }
 } else {
-  console.log('🤝 Using facilitator for verification and settlement');
+  console.log('🤝 No merchant private key configured. Payments will be verified but not settled automatically.');
 }
-
-const merchantExecutor = new MerchantExecutor(
-  simpleAgent,
-  undefined,
-  facilitator,
-  directSettlementConfig
-);
 
 console.log('🚀 x402 AI Agent initialized');
 console.log(`💰 Payment address: ${PAY_TO_ADDRESS}`);
-console.log(`🌐 Network: ${NETWORK}`);
+if (resolvedNetwork !== NETWORK) {
+  console.log(`🌐 Network: ${resolvedNetwork} (requested: ${NETWORK})`);
+} else {
+  console.log(`🌐 Network: ${resolvedNetwork}`);
+}
 console.log(`💵 Price per request: $0.10 USDC`);
 
 /**
@@ -154,42 +141,119 @@ app.post('/process', async (req, res) => {
       },
     };
 
-    // Execute the merchant executor
-    await merchantExecutor.execute(context, eventQueue);
+    const paymentPayload = message.metadata?.['x402.payment.payload'] as
+      | PaymentPayload
+      | undefined;
+    const paymentStatus = message.metadata?.['x402.payment.status'];
 
-    // Return the response
-    if (events.length > 0) {
-      const lastEvent = events[events.length - 1];
+    if (!paymentPayload || paymentStatus !== 'payment-submitted') {
+      const paymentRequired = merchantExecutor.createPaymentRequiredResponse();
 
-      console.log('📤 Sending response\n');
+      const responseMessage: Message = {
+        messageId: `msg-${Date.now()}`,
+        role: 'agent',
+        parts: [
+          {
+            kind: 'text',
+            text: 'Payment required. Please submit payment to continue.',
+          },
+        ],
+        metadata: {
+          'x402.payment.required': paymentRequired,
+          'x402.payment.status': 'payment-required',
+        },
+      };
+
+      task.status.state = TaskState.INPUT_REQUIRED;
+      task.status.message = responseMessage;
+      task.metadata = {
+        ...(task.metadata || {}),
+        'x402.payment.required': paymentRequired,
+        'x402.payment.status': 'payment-required',
+      };
+
+      events.push(task);
+      console.log('💰 Payment required for request processing');
 
       return res.json({
-        success: true,
-        task: lastEvent,
-        events: events,
+        success: false,
+        error: 'Payment Required',
+        task,
+        events,
       });
     }
 
+    const verifyResult = await merchantExecutor.verifyPayment(paymentPayload);
+
+    if (!verifyResult.isValid) {
+      const errorReason = verifyResult.invalidReason || 'Invalid payment';
+      task.status.state = TaskState.FAILED;
+      task.status.message = {
+        messageId: `msg-${Date.now()}`,
+        role: 'agent',
+        parts: [
+          {
+            kind: 'text',
+            text: `Payment verification failed: ${errorReason}`,
+          },
+        ],
+        metadata: {
+          'x402.payment.status': 'payment-rejected',
+          'x402.payment.error': errorReason,
+        },
+      };
+      task.metadata = {
+        ...(task.metadata || {}),
+        'x402.payment.status': 'payment-rejected',
+        'x402.payment.error': errorReason,
+      };
+
+      events.push(task);
+
+      return res.status(402).json({
+        error: 'Payment verification failed',
+        reason: errorReason,
+        task,
+        events,
+      });
+    }
+
+    task.metadata = {
+      ...(task.metadata || {}),
+      'x402_payment_verified': true,
+      'x402.payment.status': 'payment-verified',
+      ...(verifyResult.payer ? { 'x402.payment.payer': verifyResult.payer } : {}),
+    };
+
+    await simpleAgent.execute(context, eventQueue);
+
+    const settlement = await merchantExecutor.settlePayment(paymentPayload);
+
+    task.metadata = {
+      ...(task.metadata || {}),
+      'x402.payment.status': settlement.success ? 'payment-completed' : 'payment-failed',
+      ...(settlement.transaction
+        ? { 'x402.payment.receipts': [settlement] }
+        : {}),
+      ...(settlement.errorReason
+        ? { 'x402.payment.error': settlement.errorReason }
+        : {}),
+    };
+
+    if (events.length === 0) {
+      events.push(task);
+    }
+
+    console.log('📤 Sending response\n');
+
     return res.json({
-      success: true,
-      message: 'Request processed',
+      success: settlement.success,
+      task: events[events.length - 1],
+      events,
+      settlement,
     });
   } catch (error: any) {
     console.error('❌ Error processing request:', error);
-
-    // Check if it's a payment required exception
-    if (error.name === 'x402PaymentRequiredException') {
-      console.log('💳 Payment required - sending payment request\n');
-
-      return res.status(402).json({
-        error: 'Payment Required',
-        x402: {
-          x402Version: 1,
-          accepts: error.getAcceptsArray(),
-          error: error.message,
-        },
-      });
-    }
 
     return res.status(500).json({
       error: error.message || 'Internal server error',

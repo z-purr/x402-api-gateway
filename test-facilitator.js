@@ -1,5 +1,5 @@
+import { randomBytes } from 'crypto';
 import { Wallet } from 'ethers';
-import { processPaymentRequired } from 'a2a-x402';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -7,6 +7,77 @@ dotenv.config();
 const CLIENT_PRIVATE_KEY = process.env.CLIENT_PRIVATE_KEY;
 const PAY_TO_ADDRESS = process.env.PAY_TO_ADDRESS;
 const NETWORK = process.env.NETWORK || 'base-sepolia';
+
+const TRANSFER_AUTH_TYPES = {
+  TransferWithAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' },
+  ],
+};
+
+const CHAIN_IDS = {
+  base: 8453,
+  'base-sepolia': 84532,
+  ethereum: 1,
+  polygon: 137,
+  'polygon-amoy': 80002,
+};
+
+function selectPaymentRequirement(paymentRequired) {
+  if (!Array.isArray(paymentRequired?.accepts) || paymentRequired.accepts.length === 0) {
+    throw new Error('No payment requirements provided');
+  }
+  return paymentRequired.accepts[0];
+}
+
+function generateNonce() {
+  return `0x${randomBytes(32).toString('hex')}`;
+}
+
+function getChainId(network) {
+  const chainId = CHAIN_IDS[network];
+  if (!chainId) {
+    throw new Error(`Unsupported network "${network}"`);
+  }
+  return chainId;
+}
+
+async function createPaymentPayload(paymentRequired, wallet) {
+  const requirement = selectPaymentRequirement(paymentRequired);
+  const now = Math.floor(Date.now() / 1000);
+
+  const authorization = {
+    from: wallet.address,
+    to: requirement.payTo,
+    value: requirement.maxAmountRequired,
+    validAfter: '0',
+    validBefore: String(now + requirement.maxTimeoutSeconds),
+    nonce: generateNonce(),
+  };
+
+  const domain = {
+    name: requirement.extra?.name || 'USDC',
+    version: requirement.extra?.version || '2',
+    chainId: getChainId(requirement.network),
+    verifyingContract: requirement.asset,
+  };
+
+  const signature = await wallet.signTypedData(domain, TRANSFER_AUTH_TYPES, authorization);
+
+  return {
+    x402Version: paymentRequired.x402Version ?? 1,
+    scheme: requirement.scheme,
+    network: requirement.network,
+    payload: {
+      signature,
+      authorization,
+    },
+  };
+}
 
 async function testFacilitator() {
   console.log('🧪 Testing Facilitator Communication');
@@ -48,7 +119,7 @@ async function testFacilitator() {
 
   // Sign the payment
   console.log('\n🔐 Signing payment...');
-  const paymentPayload = await processPaymentRequired(paymentRequired, wallet);
+  const paymentPayload = await createPaymentPayload(paymentRequired, wallet);
 
   console.log('\n✅ Payment signed!');
   console.log('Payment payload:');

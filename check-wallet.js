@@ -124,7 +124,7 @@ async function checkWallet() {
       console.log(`1. ETH for gas on ${networkConfig.name}`);
       console.log('2. At least $0.10 USDC');
       console.log('\nWithout these, the test will only demonstrate the payment signing,');
-      console.log('but the facilitator won\'t be able to execute the on-chain transfer.');
+      console.log('but the server will skip submitting the on-chain transfer.');
     }
 
   } catch (error) {

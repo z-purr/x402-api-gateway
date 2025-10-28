@@ -1,15 +1,4 @@
-import {
-  x402ServerExecutor,
-  verifyPayment,
-  settlePayment,
-  PaymentPayload,
-  PaymentRequirements,
-  VerifyResponse,
-  SettleResponse,
-  FacilitatorClient,
-  AgentExecutor,
-  x402ExtensionConfig,
-} from 'a2a-x402';
+import type { PaymentPayload, PaymentRequirements } from 'x402/types';
 import { ethers } from 'ethers';
 
 const TRANSFER_AUTH_TYPES = {
@@ -23,136 +12,186 @@ const TRANSFER_AUTH_TYPES = {
   ],
 };
 
-interface DirectSettlementConfig {
+type SupportedNetwork = 'base' | 'base-sepolia' | 'polygon' | 'polygon-amoy';
+
+const NETWORK_CONFIG: Record<
+  SupportedNetwork,
+  {
+    chainId: number;
+    usdcAddress: string;
+    usdcName: string;
+    explorer: string;
+  }
+> = {
+  base: {
+    chainId: 8453,
+    usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    usdcName: 'USD Coin',
+    explorer: 'https://basescan.org',
+  },
+  'base-sepolia': {
+    chainId: 84532,
+    usdcAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    usdcName: 'USDC',
+    explorer: 'https://sepolia.basescan.org',
+  },
+  polygon: {
+    chainId: 137,
+    usdcAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+    usdcName: 'USD Coin',
+    explorer: 'https://polygonscan.com',
+  },
+  'polygon-amoy': {
+    chainId: 80002,
+    usdcAddress: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
+    usdcName: 'USDC',
+    explorer: 'https://amoy.polygonscan.com',
+  },
+};
+
+export interface MerchantExecutorOptions {
+  payToAddress: string;
+  network: SupportedNetwork;
+  price: number;
   rpcUrl?: string;
   privateKey?: string;
 }
 
-/**
- * MerchantExecutor handles payment verification and settlement for the AI agent
- * It extends x402ServerExecutor to integrate with the x402 payment protocol
- */
-export class MerchantExecutor extends x402ServerExecutor {
-  private facilitator?: FacilitatorClient;
+export interface VerifyResult {
+  isValid: boolean;
+  payer?: string;
+  invalidReason?: string;
+}
+
+export interface SettlementResult {
+  success: boolean;
+  transaction?: string;
+  network: string;
+  payer?: string;
+  errorReason?: string;
+}
+
+export class MerchantExecutor {
+  private readonly requirements: PaymentRequirements;
+  private readonly explorerUrl?: string;
   private settlementProvider?: ethers.JsonRpcProvider;
   private settlementWallet?: ethers.Wallet;
-  private directSettlementEnabled = false;
 
-  constructor(
-    delegate: AgentExecutor,
-    config?: Partial<x402ExtensionConfig>,
-    facilitator?: FacilitatorClient,
-    directSettlement?: DirectSettlementConfig
-  ) {
-    super(delegate, config);
-    this.facilitator = facilitator;
+  constructor(options: MerchantExecutorOptions) {
+    const networkConfig = NETWORK_CONFIG[options.network];
 
-    if (directSettlement?.rpcUrl && directSettlement?.privateKey) {
+    if (!networkConfig) {
+      throw new Error(`Unsupported network "${options.network}"`);
+    }
+
+    this.explorerUrl = networkConfig.explorer;
+
+    this.requirements = {
+      scheme: 'exact',
+      network: options.network,
+      asset: networkConfig.usdcAddress,
+      payTo: options.payToAddress,
+      maxAmountRequired: this.getAtomicAmount(options.price),
+      resource: '/process-request',
+      description: 'AI request processing service',
+      mimeType: 'application/json',
+      maxTimeoutSeconds: 600,
+      extra: {
+        name: networkConfig.usdcName,
+        version: '2',
+      },
+    };
+
+    if (options.privateKey) {
+      const normalizedKey = options.privateKey.startsWith('0x')
+        ? options.privateKey
+        : `0x${options.privateKey}`;
+
+      const rpcUrl =
+        options.rpcUrl || this.getDefaultRpcUrl(options.network);
+
+      if (!rpcUrl) {
+        console.warn(
+          `⚠️  No RPC URL available for network "${options.network}". Direct settlement disabled.`
+        );
+        return;
+      }
+
       try {
-        const normalizedKey = directSettlement.privateKey.startsWith('0x')
-          ? directSettlement.privateKey
-          : `0x${directSettlement.privateKey}`;
-        this.settlementProvider = new ethers.JsonRpcProvider(directSettlement.rpcUrl);
-        this.settlementWallet = new ethers.Wallet(normalizedKey, this.settlementProvider);
-        this.directSettlementEnabled = true;
+        this.settlementProvider = new ethers.JsonRpcProvider(rpcUrl);
+        this.settlementWallet = new ethers.Wallet(
+          normalizedKey,
+          this.settlementProvider
+        );
         console.log('⚡ Direct settlement enabled via RPC provider');
       } catch (error) {
-        console.warn('⚠️  Failed to initialize direct settlement, falling back to facilitator:', error);
-        this.directSettlementEnabled = false;
+        console.warn(
+          '⚠️  Failed to initialize direct settlement. Payments will not settle automatically:',
+          error
+        );
       }
     }
   }
 
-  /**
-   * Verify the payment using the default facilitator or custom one
-   */
-  async verifyPayment(
-    payload: PaymentPayload,
-    requirements: PaymentRequirements
-  ): Promise<VerifyResponse> {
+  getPaymentRequirements(): PaymentRequirements {
+    return this.requirements;
+  }
+
+  createPaymentRequiredResponse() {
+    return {
+      x402Version: 1,
+      accepts: [this.requirements],
+      error: 'Payment required for service: /process-request',
+    };
+  }
+
+  async verifyPayment(payload: PaymentPayload): Promise<VerifyResult> {
     console.log('\n🔍 Verifying payment...');
-    console.log(`   Facilitator: ${this.facilitator ? 'Custom' : 'Default (https://x402.org/facilitator)'}`);
     console.log(`   Network: ${payload.network}`);
     console.log(`   Scheme: ${payload.scheme}`);
     console.log(`   From: ${(payload.payload as any).authorization?.from}`);
-    console.log(`   To: ${requirements.payTo}`);
-    console.log(`   Amount: ${requirements.maxAmountRequired}`);
+    console.log(`   To: ${this.requirements.payTo}`);
+    console.log(`   Amount: ${this.requirements.maxAmountRequired}`);
 
-    try {
-      if (this.directSettlementEnabled) {
-        console.log('   Mode: Local verification (direct settlement enabled)');
-        const result = this.verifyPaymentLocally(payload, requirements);
-        console.log('\n📋 Verification result:');
-        console.log(`   Valid: ${result.isValid}`);
-        if (!result.isValid) {
-          console.log(`   ❌ Reason: ${result.invalidReason}`);
-        }
-        return result;
-      }
+    const result = this.verifyPaymentLocally(payload, this.requirements);
 
-      const result = await verifyPayment(payload, requirements, this.facilitator);
-
-      console.log('\n📋 Verification result:');
-      console.log(`   Valid: ${result.isValid}`);
-      if (!result.isValid) {
-        console.log(`   ❌ Reason: ${result.invalidReason}`);
-      }
-
-      return result;
-    } catch (error) {
-      console.error('\n❌ Error during verification:', error);
-      throw error;
+    console.log('\n📋 Verification result:');
+    console.log(`   Valid: ${result.isValid}`);
+    if (!result.isValid) {
+      console.log(`   ❌ Reason: ${result.invalidReason}`);
     }
+
+    return result;
   }
 
-  /**
-   * Settle the payment using the default facilitator or custom one
-   */
-  async settlePayment(
-    payload: PaymentPayload,
-    requirements: PaymentRequirements
-  ): Promise<SettleResponse> {
+  async settlePayment(payload: PaymentPayload): Promise<SettlementResult> {
     console.log('\n💰 Settling payment...');
-    console.log(`   Network: ${requirements.network}`);
-    console.log(`   Amount: ${requirements.maxAmountRequired} (micro units)`);
-    console.log(`   Pay to: ${requirements.payTo}`);
+    console.log(`   Network: ${this.requirements.network}`);
+    console.log(
+      `   Amount: ${this.requirements.maxAmountRequired} (micro units)`
+    );
+    console.log(`   Pay to: ${this.requirements.payTo}`);
 
-    if (this.directSettlementEnabled) {
-      console.log('   Mode: Direct on-chain settlement');
-      const result = await this.settleOnChain(payload, requirements);
-
-      console.log('\n✅ Payment settlement result:');
-      console.log(`   Success: ${result.success}`);
-      console.log(`   Network: ${result.network}`);
-      if (result.transaction) {
-        console.log(`   Transaction: ${result.transaction}`);
-        const explorer = this.getExplorerUrl(requirements.network);
-        if (explorer) {
-          console.log(`   Explorer: ${explorer}/tx/${result.transaction}`);
-        }
-      }
-      if (result.payer) {
-        console.log(`   Payer: ${result.payer}`);
-      }
-      if (result.errorReason) {
-        console.log(`   Error: ${result.errorReason}`);
-      }
-
-      return result;
+    if (!this.settlementWallet || !this.settlementProvider) {
+      return {
+        success: false,
+        network: this.requirements.network,
+        errorReason:
+          'Settlement wallet not configured. Provide PRIVATE_KEY to enable settlement.',
+      };
     }
 
-    const result = await settlePayment(payload, requirements, this.facilitator);
+    const result = await this.settleOnChain(payload, this.requirements);
 
     console.log('\n✅ Payment settlement result:');
     console.log(`   Success: ${result.success}`);
     console.log(`   Network: ${result.network}`);
-      if (result.transaction) {
-        console.log(`   Transaction: ${result.transaction}`);
-        const explorer = this.getExplorerUrl(requirements.network);
-        if (explorer) {
-          console.log(`   Explorer: ${explorer}/tx/${result.transaction}`);
-        }
+    if (result.transaction) {
+      console.log(`   Transaction: ${result.transaction}`);
+      if (this.explorerUrl) {
+        console.log(`   Explorer: ${this.explorerUrl}/tx/${result.transaction}`);
       }
+    }
     if (result.payer) {
       console.log(`   Payer: ${result.payer}`);
     }
@@ -163,13 +202,10 @@ export class MerchantExecutor extends x402ServerExecutor {
     return result;
   }
 
-  /**
-   * Perform EIP-3009 signature verification locally using ethers
-   */
   private verifyPaymentLocally(
     payload: PaymentPayload,
     requirements: PaymentRequirements
-  ): VerifyResponse {
+  ): VerifyResult {
     const exactPayload = payload.payload as any;
     const authorization = exactPayload?.authorization;
     const signature = exactPayload?.signature;
@@ -188,7 +224,10 @@ export class MerchantExecutor extends x402ServerExecutor {
       };
     }
 
-    if (authorization.to?.toLowerCase() !== requirements.payTo.toLowerCase()) {
+    if (
+      authorization.to?.toLowerCase() !==
+      requirements.payTo.toLowerCase()
+    ) {
       return {
         isValid: false,
         invalidReason: 'Authorization recipient does not match payment requirement',
@@ -213,7 +252,6 @@ export class MerchantExecutor extends x402ServerExecutor {
 
     const validAfterNum = Number(authorization.validAfter ?? 0);
     const validBeforeNum = Number(authorization.validBefore ?? 0);
-
     if (Number.isNaN(validAfterNum) || Number.isNaN(validBeforeNum)) {
       return {
         isValid: false,
@@ -237,14 +275,19 @@ export class MerchantExecutor extends x402ServerExecutor {
 
     try {
       const domain = this.buildEip712Domain(requirements);
-      const recovered = ethers.verifyTypedData(domain, TRANSFER_AUTH_TYPES, {
-        from: authorization.from,
-        to: authorization.to,
-        value: authorization.value,
-        validAfter: authorization.validAfter,
-        validBefore: authorization.validBefore,
-        nonce: authorization.nonce,
-      }, signature);
+      const recovered = ethers.verifyTypedData(
+        domain,
+        TRANSFER_AUTH_TYPES,
+        {
+          from: authorization.from,
+          to: authorization.to,
+          value: authorization.value,
+          validAfter: authorization.validAfter,
+          validBefore: authorization.validBefore,
+          nonce: authorization.nonce,
+        },
+        signature
+      );
 
       if (recovered.toLowerCase() !== authorization.from.toLowerCase()) {
         return {
@@ -260,23 +303,22 @@ export class MerchantExecutor extends x402ServerExecutor {
     } catch (error) {
       return {
         isValid: false,
-        invalidReason: `Signature verification failed: ${error instanceof Error ? error.message : String(error)}`,
+        invalidReason: `Signature verification failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       };
     }
   }
 
-  /**
-   * Execute transferWithAuthorization directly on the USDC contract
-   */
   private async settleOnChain(
     payload: PaymentPayload,
     requirements: PaymentRequirements
-  ): Promise<SettleResponse> {
-    if (!this.settlementWallet || !this.settlementProvider) {
+  ): Promise<SettlementResult> {
+    if (!this.settlementWallet) {
       return {
         success: false,
         network: requirements.network,
-        errorReason: 'Direct settlement wallet not configured',
+        errorReason: 'Settlement wallet not configured',
       };
     }
 
@@ -339,47 +381,45 @@ export class MerchantExecutor extends x402ServerExecutor {
         success: false,
         network: requirements.network,
         payer: authorization.from,
-        errorReason: error instanceof Error ? error.message : String(error),
+        errorReason:
+          error instanceof Error ? error.message : String(error),
       };
     }
   }
 
   private buildEip712Domain(requirements: PaymentRequirements) {
+    const config = NETWORK_CONFIG[requirements.network as SupportedNetwork];
+    if (!config) {
+      throw new Error(
+        `Unsupported network "${requirements.network}" for direct settlement`
+      );
+    }
+
     return {
-      name: requirements.extra?.name || 'USDC',
+      name: requirements.extra?.name || config.usdcName,
       version: requirements.extra?.version || '2',
-      chainId: this.getChainId(requirements.network),
+      chainId: config.chainId,
       verifyingContract: requirements.asset,
     };
   }
 
-  private getChainId(network: PaymentRequirements['network']) {
-    const chainIds: Record<string, number> = {
-      base: 8453,
-      'base-sepolia': 84532,
-      ethereum: 1,
-      polygon: 137,
-      'polygon-amoy': 80002,
-    };
-
-    const chainId = chainIds[network];
-
-    if (!chainId) {
-      throw new Error(`Unsupported network "${network}" for direct settlement`);
-    }
-
-    return chainId;
+  private getAtomicAmount(priceUsd: number): string {
+    const atomicUnits = Math.floor(priceUsd * 1_000_000);
+    return atomicUnits.toString();
   }
 
-  private getExplorerUrl(network: PaymentRequirements['network']) {
-    const explorers: Record<string, string> = {
-      base: 'https://basescan.org',
-      'base-sepolia': 'https://sepolia.basescan.org',
-      ethereum: 'https://etherscan.io',
-      polygon: 'https://polygonscan.com',
-      'polygon-amoy': 'https://amoy.polygonscan.com',
-    };
-
-    return explorers[network];
+  private getDefaultRpcUrl(network: SupportedNetwork): string | undefined {
+    switch (network) {
+      case 'base':
+        return 'https://mainnet.base.org';
+      case 'base-sepolia':
+        return 'https://sepolia.base.org';
+      case 'polygon':
+        return 'https://polygon-rpc.com';
+      case 'polygon-amoy':
+        return 'https://rpc-amoy.polygon.technology';
+      default:
+        return undefined;
+    }
   }
 }
