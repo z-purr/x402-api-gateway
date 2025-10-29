@@ -2,17 +2,17 @@
 
 # x402 Starter Kit
 
-A starter kit for building paid APIs using the x402 payment protocol. Includes an OpenAI integration as a demonstration example.
+A starter kit for building paid APIs using the x402 payment protocol.
 
 > To deploy to EigenCompute, follow [these steps](DEPLOYING_TO_EIGENCOMPUTE.md).
 
 ## Overview
 
-This starter kit demonstrates how to build a paid API using x402 payments. It:
+This starter kit demonstrates how to build paid APIs using x402. It:
 
 1. Receives API requests
-2. Requires payment (of $0.10 USDC) before processing
-3. Verifies and settles payments on-chain
+2. Requires payment (in this example of $0.10 USDC) before processing
+3. Verifies and settles payments through the x402 facilitator (defaulting to https://x402.org/facilitator)
 4. Processes requests (using OpenAI as an example)
 5. Returns responses after payment is confirmed
 
@@ -21,7 +21,7 @@ This starter kit demonstrates how to build a paid API using x402 payments. It:
 The API consists of three main components:
 
 - **ExampleService**: Example service logic that processes requests using OpenAI (replace with your own service implementation)
-- **MerchantExecutor**: Handles payment verification and settlement using `x402` types with direct EIP-3009 settlement via `ethers`
+- **MerchantExecutor**: Calls the x402 facilitator service for verification/settlement (defaults to `https://x402.org/facilitator`, configurable via `FACILITATOR_URL`)
 - **Server**: Express HTTP server that orchestrates payment validation and request processing
 
 ## Prerequisites
@@ -53,40 +53,43 @@ Edit `.env` and fill in your values:
 # Server Configuration
 PORT=3000
 
-# Wallet Configuration
-# Your Ethereum private key (without 0x prefix) - this wallet will receive USDC payments
-PRIVATE_KEY=your_private_key_here
-
 # Payment Configuration
-# The wallet address that will receive payments (derived from PRIVATE_KEY)
+# Wallet address that will receive USDC payments
 PAY_TO_ADDRESS=0xYourWalletAddress
 
 # Network Configuration
 # Options: "base", "base-sepolia", "ethereum", "polygon", "polygon-amoy"
 NETWORK=base-sepolia
 
+# Facilitator Configuration (optional)
+# FACILITATOR_URL=https://your-custom-facilitator.com
+# FACILITATOR_API_KEY=your_api_key_if_required
+
+# Public Service URL (optional)
+# Used in payment requirements so the facilitator sees a fully-qualified resource URL
+# SERVICE_URL=http://localhost:3000/process
+
 # OpenAI Configuration
 # Your OpenAI API key for the example service (replace with your own API configuration)
 OPENAI_API_KEY=your_openai_api_key_here
 
-# Optional: RPC URL for direct blockchain interaction
-# Set this (along with PRIVATE_KEY) to enable direct settlement.
-# If omitted and NETWORK is "base" or "base-sepolia", the API will use Coinbase's public RPC.
-# RPC_URL=https://base-sepolia.g.alchemy.com/v2/your-api-key
+# Test Client Configuration (optional - only needed for end-to-end payment testing)
+# CLIENT_PRIVATE_KEY=your_test_wallet_private_key_here
+# AGENT_URL=http://localhost:3000
 
 # Optional: Debug logging
 X402_DEBUG=true
 ```
 
+**Facilitator:**
+- By default the API uses the hosted facilitator at `https://x402.org/facilitator` for verification and settlement
+- Set `FACILITATOR_URL` (and optionally `FACILITATOR_API_KEY`) to use a different facilitator instance
+- Update `SERVICE_URL` if clients will reach your API through a different hostname
+
 **Important:**
 - `PAY_TO_ADDRESS` should be your wallet address where you want to receive USDC payments
 - `NETWORK` should match where you want to receive payments (recommend `base-sepolia` for testing)
 - Never commit your `.env` file to version control
-
-**Direct Settlement:**
-- If you set `PRIVATE_KEY` (and optionally `RPC_URL`), the API verifies the EIP-3009 signature locally with `ethers` and calls `transferWithAuthorization()` on the USDC contract directly
-- If `RPC_URL` is omitted, the API will use public RPC endpoints for Base/Base Sepolia
-- Omit `PRIVATE_KEY` to disable automatic settlement (payments remain verified but you can plug in your own settlement flow)
 
 ## Running the API
 
@@ -242,7 +245,7 @@ For a complete client example, see the [`x402` library documentation](https://ww
 
 ### Payment Verification
 
-`src/MerchantExecutor.ts` validates the EIP-3009 payload locally (using types from the `x402` package) before the request is processed. When a merchant private key is configured it also submits `transferWithAuthorization` on-chain via `ethers`, returning the resulting transaction hash for reference.
+`src/MerchantExecutor.ts` sends the payment payload to the configured x402 facilitator. The facilitator validates the authorization, performs settlement on-chain, and returns the resulting transaction details. Make sure `SERVICE_URL` reflects the public URL of your paid endpoint so the facilitator can validate the `resource` field. If you need custom logic, point the executor at your own facilitator implementation with `FACILITATOR_URL`.
 
 ### Error Handling
 
@@ -310,7 +313,7 @@ Make sure you've set `PAY_TO_ADDRESS` in your `.env` file to your wallet address
 - Verify your wallet has USDC approval set
 - Make sure the payment amount matches ($0.10)
 - If signature verification fails, review the logged invalid reason and confirm the client signed the latest payment requirements
-- For settlement errors, ensure `PRIVATE_KEY` (and optionally `RPC_URL`) are set, or integrate a custom settlement flow tailored to your infrastructure
+- For settlement errors, confirm the facilitator is reachable and that any `FACILITATOR_URL` / `FACILITATOR_API_KEY` settings are correct
 
 ### OpenAI rate limits
 

@@ -19,11 +19,13 @@ app.use(express.json());
 
 // Configuration
 const PORT = process.env.PORT || 3000;
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const PAY_TO_ADDRESS = process.env.PAY_TO_ADDRESS;
 const NETWORK = process.env.NETWORK || 'base-sepolia';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const RPC_URL = process.env.RPC_URL;
+const FACILITATOR_URL = process.env.FACILITATOR_URL;
+const FACILITATOR_API_KEY = process.env.FACILITATOR_API_KEY;
+const SERVICE_URL =
+  process.env.SERVICE_URL || `http://localhost:${PORT}/process`;
 
 // Validate environment variables
 if (!OPENAI_API_KEY) {
@@ -54,21 +56,17 @@ const merchantOptions: MerchantExecutorOptions = {
   payToAddress: PAY_TO_ADDRESS,
   network: resolvedNetwork,
   price: 0.1,
-  rpcUrl: RPC_URL,
-  privateKey: PRIVATE_KEY,
+  facilitatorUrl: FACILITATOR_URL,
+  facilitatorApiKey: FACILITATOR_API_KEY,
+  resourceUrl: SERVICE_URL,
 };
 
 const merchantExecutor = new MerchantExecutor(merchantOptions);
-const paymentRequirements = merchantExecutor.getPaymentRequirements();
 
-if (PRIVATE_KEY) {
-  if (!RPC_URL) {
-    console.log('⚡ Direct settlement enabled (using default RPC endpoint)');
-  } else {
-    console.log('⚡ Direct settlement enabled (custom RPC provided)');
-  }
+if (FACILITATOR_URL) {
+  console.log(`🌐 Using custom facilitator: ${FACILITATOR_URL}`);
 } else {
-  console.log('🤝 No merchant private key configured. Payments will be verified but not settled automatically.');
+  console.log('🌐 Using default facilitator: https://x402.org/facilitator');
 }
 
 console.log('🚀 x402 Payment API initialized');

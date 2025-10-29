@@ -88,25 +88,11 @@ To run your own facilitator with custom RPC:
 
 If you want to bypass the facilitator and interact with the blockchain directly, you would need to:
 
-1. Create a custom `FacilitatorClient` implementation
-2. Use ethers.js with your RPC URL
-3. Implement payment verification and settlement logic
+1. Replace the bundled `MerchantExecutor` with your own implementation
+2. Use `ethers` (or another SDK) together with your RPC URL
+3. Implement payment verification and settlement logic for the schemes you support
 
-Example custom facilitator:
-
-Our reference implementation (`src/MerchantExecutor.ts`) already handles this by using the core `x402` types together with `ethers`:
-
-- If you set `PRIVATE_KEY` (and optionally `RPC_URL`), the agent verifies the EIP-3009 payload locally and submits `transferWithAuthorization` directly to USDC.
-- If you omit those variables, the server will still verify signatures but will skip settlement (so you can plug in your own flow).
-
-Use this file as a starting point if you want to customise the behaviour (e.g. support additional assets or add logging). The implementation relies on:
-
-```typescript
-import type { PaymentPayload, PaymentRequirements, VerifyResponse, SettleResponse } from 'x402/types';
-import { ethers } from 'ethers';
-```
-
-From there you can adapt the verification/settlement helpers to fit your architecture.
+The starter kit ships with a facilitator-based executor. Use it as a reference for how to construct payment requirements and wire results back to the server. If you need full control, build a new executor that verifies signatures locally and submits settlements directly on-chain.
 
 ## RPC Providers
 
@@ -164,18 +150,22 @@ RPC_URL=https://mainnet.base.org
 
 The agent currently uses:
 
-**File: agent/src/server.ts**
+**File: src/server.ts**
 ```typescript
-// Initialize facilitator (optional custom configuration)
-let facilitator: FacilitatorClient | undefined;
+const merchantOptions = {
+  payToAddress: PAY_TO_ADDRESS,
+  network: resolvedNetwork,
+  price: 0.1,
+  facilitatorUrl: FACILITATOR_URL,
+  facilitatorApiKey: FACILITATOR_API_KEY,
+};
+
+const merchantExecutor = new MerchantExecutor(merchantOptions);
+
 if (FACILITATOR_URL) {
-  facilitator = new DefaultFacilitatorClient({
-    url: FACILITATOR_URL,
-    apiKey: FACILITATOR_API_KEY,
-  });
-  console.log(`🔧 Using custom facilitator: ${FACILITATOR_URL}`);
+  console.log(`🌐 Using custom facilitator: ${FACILITATOR_URL}`);
 } else {
-  console.log('🔧 Using default facilitator: https://x402.org/facilitator');
+  console.log('🌐 Using default facilitator: https://x402.org/facilitator');
 }
 ```
 
@@ -214,9 +204,8 @@ Consider these options:
 - Check RPC endpoint is responding (if self-hosting)
 
 ### "Settlement failed"
-- Ensure RPC URL matches network
-- Check wallet has gas tokens
-- Verify RPC endpoint rate limits
+- If you're using the hosted facilitator, retry later or contact support if the status page reports issues
+- If you're running a custom facilitator, ensure its RPC URL matches the selected network, the settlement wallet has gas, and the RPC endpoint is healthy
 
 ### "Invalid signature"
 - Network mismatch (e.g., mainnet signature on testnet)
@@ -242,4 +231,7 @@ FACILITATOR_API_KEY=your_key
 # Optional - only if implementing custom blockchain interaction
 RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
 PRIVATE_KEY=your_private_key
+
+# Optional - ensure payment requirements include a fully-qualified endpoint URL
+SERVICE_URL=https://your-domain.com/process
 ```
