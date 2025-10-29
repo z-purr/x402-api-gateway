@@ -1,4 +1,4 @@
-# x402 Developer Starter Kit
+# x402 Starter Kit
 
 A starter kit for building paid APIs using the x402 payment protocol. Includes an OpenAI integration as a demonstration example.
 
