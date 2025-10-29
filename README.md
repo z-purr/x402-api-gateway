@@ -4,7 +4,7 @@
 
 A starter kit for building paid APIs using the x402 payment protocol.
 
-> To deploy to EigenCompute, follow [these steps](DEPLOYING_TO_EIGENCOMPUTE.md).
+> To deploy to EigenCompute, follow [these steps](DEPLOYING_TO_EIGENCOMPUTE.md). To sign up for EigenAI, start [here](https://docs.eigencloud.xyz/products/eigenai/eigenai-overview)
 
 ## Overview
 
