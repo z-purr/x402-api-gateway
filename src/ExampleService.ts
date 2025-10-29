@@ -1,8 +1,23 @@
 import OpenAI from 'openai';
 import { EventQueue, RequestContext, TaskState } from './x402Types.js';
 
+type AiProvider = 'openai' | 'eigenai';
+
+interface ExampleServiceOptions {
+  apiKey?: string;
+  baseUrl?: string;
+  defaultHeaders?: Record<string, string>;
+  provider: AiProvider;
+  payToAddress: string;
+  network: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  seed?: number;
+}
+
 /**
- * ExampleService - A sample service implementation using OpenAI
+ * ExampleService - A sample service implementation using an OpenAI-compatible API
  *
  * This is a demonstration of how to process paid requests.
  * Replace this with your own service logic (database queries, computations, API calls, etc.)
@@ -13,11 +28,53 @@ export class ExampleService {
   private openai: OpenAI;
   private payToAddress: string;
   private network: string;
+  private readonly model: string;
+  private readonly temperature: number;
+  private readonly maxTokens?: number;
+  private readonly seed?: number;
+  private readonly provider: AiProvider;
 
-  constructor(apiKey: string, payToAddress: string, network: string = 'base-sepolia') {
-    this.openai = new OpenAI({ apiKey });
+  constructor({
+    apiKey,
+    baseUrl,
+    defaultHeaders,
+    provider,
+    payToAddress,
+    network,
+    model,
+    temperature = 0.7,
+    maxTokens = 500,
+    seed,
+  }: ExampleServiceOptions) {
+    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {};
+
+    if (provider === 'openai') {
+      if (!apiKey) {
+        throw new Error('OPENAI_API_KEY is required when using the OpenAI provider');
+      }
+      clientOptions.apiKey = apiKey;
+    } else if (provider === 'eigenai') {
+      if (!defaultHeaders?.['x-api-key']) {
+        throw new Error('EIGENAI_API_KEY is required when using the EigenAI provider');
+      }
+    }
+
+    if (baseUrl) {
+      clientOptions.baseURL = baseUrl;
+    }
+
+    if (defaultHeaders && Object.keys(defaultHeaders).length > 0) {
+      clientOptions.defaultHeaders = defaultHeaders;
+    }
+
+    this.openai = new OpenAI(clientOptions);
     this.payToAddress = payToAddress;
     this.network = network;
+    this.model = model ?? (provider === 'eigenai' ? 'gpt-oss-120b-f16' : 'gpt-4o-mini');
+    this.temperature = temperature;
+    this.maxTokens = maxTokens;
+    this.seed = seed;
+    this.provider = provider;
   }
 
   async execute(context: RequestContext, eventQueue: EventQueue): Promise<void> {
@@ -40,7 +97,7 @@ export class ExampleService {
       // Call OpenAI API to process the request
       // REPLACE THIS with your own service logic
       const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: this.model,
         messages: [
           {
             role: 'system',
@@ -51,8 +108,11 @@ export class ExampleService {
             content: userMessage,
           },
         ],
-        temperature: 0.7,
-        max_tokens: 500,
+        temperature: this.temperature,
+        max_tokens: this.maxTokens,
+        ...(this.provider === 'eigenai' && this.seed !== undefined
+          ? { seed: this.seed }
+          : {}),
       });
 
       const response = completion.choices[0]?.message?.content || 'No response generated';

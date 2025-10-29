@@ -13,14 +13,14 @@ This starter kit demonstrates how to build paid APIs using x402. It:
 1. Receives API requests
 2. Requires payment (in this example of $0.10 USDC) before processing
 3. Verifies and settles payments through the x402 facilitator (defaulting to https://x402.org/facilitator)
-4. Processes requests (using OpenAI as an example)
+4. Processes requests (using OpenAI/EigenAI as configurable examples)
 5. Returns responses after payment is confirmed
 
 ## Architecture
 
 The API consists of three main components:
 
-- **ExampleService**: Example service logic that processes requests using OpenAI (replace with your own service implementation)
+- **ExampleService**: Example service logic that processes requests using OpenAI or EigenAI (replace with your own service implementation)
 - **MerchantExecutor**: Calls the x402 facilitator service for verification/settlement (defaults to `https://x402.org/facilitator`, configurable via `FACILITATOR_URL`)
 - **Server**: Express HTTP server that orchestrates payment validation and request processing
 
@@ -61,6 +61,24 @@ PAY_TO_ADDRESS=0xYourWalletAddress
 # Options: "base", "base-sepolia", "ethereum", "polygon", "polygon-amoy"
 NETWORK=base-sepolia
 
+# AI Provider Configuration
+# Options: "openai" (default) or "eigenai"
+# AI_PROVIDER=openai
+# AI_MODEL=gpt-4o-mini
+# AI_TEMPERATURE=0.7
+# AI_MAX_TOKENS=500
+# AI_SEED=42
+
+# OpenAI Configuration
+# Your OpenAI API key for the example service (replace with your own API configuration)
+OPENAI_API_KEY=your_openai_api_key_here
+# Optional: override the OpenAI base URL
+# OPENAI_BASE_URL=https://api.openai.com/v1
+
+# EigenAI Configuration (required if AI_PROVIDER=eigenai)
+# EIGENAI_API_KEY=your_eigenai_api_key_here
+# EIGENAI_BASE_URL=https://eigenai.eigencloud.xyz/v1
+
 # Facilitator Configuration (optional)
 # FACILITATOR_URL=https://your-custom-facilitator.com
 # FACILITATOR_API_KEY=your_api_key_if_required
@@ -79,10 +97,6 @@ NETWORK=base-sepolia
 # Public Service URL (optional)
 # Used in payment requirements so the facilitator sees a fully-qualified resource URL
 # SERVICE_URL=http://localhost:3000/process
-
-# OpenAI Configuration
-# Your OpenAI API key for the example service (replace with your own API configuration)
-OPENAI_API_KEY=your_openai_api_key_here
 
 # Test Client Configuration (optional - only needed for end-to-end payment testing)
 # CLIENT_PRIVATE_KEY=your_test_wallet_private_key_here
@@ -110,9 +124,15 @@ X402_DEBUG=true
 - Update `SERVICE_URL` if clients reach your API through a different hostname so the payment requirement has a fully-qualified resource URL
 - If you set `NETWORK` to something other than `base`, `base-sepolia`, `polygon`, or `polygon-amoy`, provide `ASSET_ADDRESS`, `ASSET_NAME`, and (for local settlement) `CHAIN_ID`
 
+**AI Provider:**
+- Default: `AI_PROVIDER=openai` (requires `OPENAI_API_KEY`)
+- EigenAI: set `AI_PROVIDER=eigenai`, provide `EIGENAI_API_KEY`, and optionally override `EIGENAI_BASE_URL`
+- Use `AI_MODEL`, `AI_TEMPERATURE`, `AI_MAX_TOKENS`, and `AI_SEED` to tune inference behaviour for either provider
+
 **Important:**
 - `PAY_TO_ADDRESS` should be your wallet address where you want to receive USDC payments
 - `NETWORK` should match where you want to receive payments (recommend `base-sepolia` for testing)
+- `OPENAI_API_KEY` is required unless `AI_PROVIDER=eigenai` (then provide `EIGENAI_API_KEY`)
 - Never commit your `.env` file to version control
 
 ## Running the API

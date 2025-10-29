@@ -35,6 +35,21 @@ const EXPLORER_URL = process.env.EXPLORER_URL;
 const CHAIN_ID = process.env.CHAIN_ID
   ? Number.parseInt(process.env.CHAIN_ID, 10)
   : undefined;
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
+const EIGENAI_BASE_URL =
+  process.env.EIGENAI_BASE_URL || 'https://eigenai.eigencloud.xyz/v1';
+const EIGENAI_API_KEY = process.env.EIGENAI_API_KEY;
+const AI_MODEL = process.env.AI_MODEL;
+const AI_TEMPERATURE = process.env.AI_TEMPERATURE
+  ? Number.parseFloat(process.env.AI_TEMPERATURE)
+  : undefined;
+const AI_MAX_TOKENS = process.env.AI_MAX_TOKENS
+  ? Number.parseInt(process.env.AI_MAX_TOKENS, 10)
+  : undefined;
+const AI_SEED = process.env.AI_SEED
+  ? Number.parseInt(process.env.AI_SEED, 10)
+  : undefined;
 const SUPPORTED_NETWORKS: Network[] = [
   'base',
   'base-sepolia',
@@ -51,8 +66,20 @@ const SUPPORTED_NETWORKS: Network[] = [
 ];
 
 // Validate environment variables
-if (!OPENAI_API_KEY) {
-  console.error('❌ OPENAI_API_KEY is required');
+if (AI_PROVIDER === 'openai') {
+  if (!OPENAI_API_KEY) {
+    console.error('❌ OPENAI_API_KEY is required when AI_PROVIDER=openai');
+    process.exit(1);
+  }
+} else if (AI_PROVIDER === 'eigenai') {
+  if (!EIGENAI_API_KEY && !OPENAI_API_KEY) {
+    console.error('❌ EIGENAI_API_KEY (or OPENAI_API_KEY fallback) is required when AI_PROVIDER=eigenai');
+    process.exit(1);
+  }
+} else {
+  console.error(
+    `❌ AI_PROVIDER "${AI_PROVIDER}" is not supported. Supported providers: openai, eigenai`
+  );
   process.exit(1);
 }
 
@@ -90,9 +117,28 @@ if (settlementMode === 'direct' && !PRIVATE_KEY) {
   process.exit(1);
 }
 
-// Initialize the example service (replace with your own service)
-const exampleService = new ExampleService(OPENAI_API_KEY, PAY_TO_ADDRESS, resolvedNetwork);
+const exampleService = new ExampleService({
+  provider: AI_PROVIDER === 'eigenai' ? 'eigenai' : 'openai',
+  apiKey: AI_PROVIDER === 'openai' ? OPENAI_API_KEY : undefined,
+  baseUrl:
+    AI_PROVIDER === 'eigenai'
+      ? EIGENAI_BASE_URL
+      : OPENAI_BASE_URL || undefined,
+  defaultHeaders:
+    AI_PROVIDER === 'eigenai'
+      ? { 'x-api-key': (EIGENAI_API_KEY || OPENAI_API_KEY)! }
+      : undefined,
+  payToAddress: PAY_TO_ADDRESS,
+  network: resolvedNetwork,
+  model:
+    AI_MODEL ??
+    (AI_PROVIDER === 'eigenai' ? 'gpt-oss-120b-f16' : 'gpt-4o-mini'),
+  temperature: AI_TEMPERATURE ?? 0.7,
+  maxTokens: AI_MAX_TOKENS ?? 500,
+  seed: AI_PROVIDER === 'eigenai' ? AI_SEED : undefined,
+});
 
+// Initialize the example service (replace with your own service)
 const merchantOptions: MerchantExecutorOptions = {
   payToAddress: PAY_TO_ADDRESS,
   network: resolvedNetwork,
