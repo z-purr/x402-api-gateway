@@ -2,10 +2,14 @@ import OpenAI from 'openai';
 import { EventQueue, RequestContext, TaskState } from './x402Types.js';
 
 /**
- * SimpleAgent is an AI agent that processes user requests using OpenAI
- * Payment validation is handled by the server before invoking this agent
+ * ExampleService - A sample service implementation using OpenAI
+ *
+ * This is a demonstration of how to process paid requests.
+ * Replace this with your own service logic (database queries, computations, API calls, etc.)
+ *
+ * Payment validation is handled by the server before this service is invoked.
  */
-export class SimpleAgent {
+export class ExampleService {
   private openai: OpenAI;
   private payToAddress: string;
   private network: string;
@@ -34,6 +38,7 @@ export class SimpleAgent {
 
     try {
       // Call OpenAI API to process the request
+      // REPLACE THIS with your own service logic
       const completion = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
@@ -52,7 +57,7 @@ export class SimpleAgent {
 
       const response = completion.choices[0]?.message?.content || 'No response generated';
 
-      console.log(`🤖 AI response: ${response}`);
+      console.log(`🤖 Service response: ${response}`);
 
       // Update task with the response
       task.status.state = TaskState.COMPLETED;

@@ -1,11 +1,11 @@
 # Testing Guide
 
-Complete guide for testing the x402 AI Agent.
+Complete guide for testing the x402 payment API starter kit.
 
 ## Test Scripts Available
 
 ### 1. Basic Health Check
-Simple curl test to verify the agent is running:
+Simple curl test to verify the API is running:
 
 ```bash
 curl http://localhost:3000/health
@@ -19,7 +19,7 @@ Test the payment requirement flow:
 ```
 
 This will:
-- Check agent health
+- Check API health
 - Send a request without payment
 - Show the 402 Payment Required response
 
@@ -33,14 +33,14 @@ npm test
 or
 
 ```bash
-./test-agent.sh
+./test-request.sh
 ```
 
 ## Test Scenarios
 
-### Test 1: Agent Health Check
+### Test 1: API Health Check
 
-**What it tests:** Agent is running and configured properly
+**What it tests:** API is running and configured properly
 
 ```bash
 curl http://localhost:3000/health
@@ -50,7 +50,7 @@ curl http://localhost:3000/health
 ```json
 {
   "status": "healthy",
-  "service": "x402-ai-agent",
+  "service": "x402-payment-api",
   "version": "1.0.0",
   "payment": {
     "address": "0xYourAddress...",
@@ -62,7 +62,7 @@ curl http://localhost:3000/health
 
 ### Test 2: Payment Required Flow
 
-**What it tests:** Agent correctly requests payment
+**What it tests:** API correctly requests payment
 
 ```bash
 curl -X POST http://localhost:3000/process \
@@ -116,22 +116,22 @@ npm test
 
 **What happens:**
 1. Client sends request
-2. Agent returns 402 Payment Required
+2. API returns 402 Payment Required
 3. Client signs payment with wallet
 4. Client submits signed payment
-5. Agent verifies payment with facilitator
-6. Agent processes request with OpenAI
-7. Agent settles payment on blockchain
-8. Agent returns AI response
+5. API verifies payment signature
+6. API processes request (calls OpenAI in this example)
+7. API settles payment on blockchain
+8. API returns response
 
 **Expected output:**
 ```
-🧪 x402 AI Agent Test Client
+🧪 x402 Payment API Test Client
 ================================
 
-🏥 Checking agent health...
-✅ Agent is healthy
-   Service: x402-ai-agent
+🏥 Checking API health...
+✅ API is healthy
+   Service: x402-payment-api
    Payment address: 0x...
    Network: base-sepolia
    Price: $0.10
@@ -177,14 +177,14 @@ The test client (`src/testClient.ts`) supports:
 ### Environment Variables
 
 ```env
-# Required for the agent
+# Required for the API
 OPENAI_API_KEY=your_openai_api_key
 PAY_TO_ADDRESS=0xYourMerchantAddress
 NETWORK=base-sepolia
 
 # Optional for testing with payments
 CLIENT_PRIVATE_KEY=your_test_wallet_private_key
-AGENT_URL=http://localhost:3000
+API_URL=http://localhost:3000
 ```
 
 ### Test Client API
@@ -275,9 +275,9 @@ npm test
 
 ## Troubleshooting Tests
 
-### "Agent is not running"
+### "API is not running"
 
-Start the agent first:
+Start the API first:
 ```bash
 npm start
 ```
@@ -311,7 +311,7 @@ Check:
 ### "Network mismatch"
 
 Ensure:
-- Agent's `NETWORK` setting matches your test wallet's network
+- API's `NETWORK` setting matches your test wallet's network
 - Client wallet is funded on the correct network
 - USDC contract address matches the network
 
@@ -321,7 +321,7 @@ For automated testing without payments:
 
 ```yaml
 # .github/workflows/test.yml
-name: Test Agent
+name: Test Payment API
 
 on: [push, pull_request]
 
@@ -340,13 +340,13 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Start agent
+      - name: Start API
         run: npm start &
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PAY_TO_ADDRESS: "0x0000000000000000000000000000000000000000"
 
-      - name: Wait for agent
+      - name: Wait for API
         run: sleep 5
 
       - name: Test health endpoint
@@ -362,23 +362,23 @@ jobs:
 
 ## Manual Testing Checklist
 
-- [ ] Agent starts without errors
+- [ ] API starts without errors
 - [ ] Health endpoint returns 200 OK
 - [ ] Request without payment returns 402
 - [ ] Payment requirements include correct network
 - [ ] Payment requirements include correct amount ($0.10 = 100000 micro USDC)
 - [ ] Test client can sign payment
-- [ ] Agent accepts signed payment
-- [ ] Agent verifies payment with facilitator
-- [ ] Agent processes request with OpenAI
-- [ ] Agent settles payment on blockchain
-- [ ] Agent returns AI-generated response
+- [ ] API accepts signed payment
+- [ ] API verifies payment signature locally
+- [ ] API processes request (calls service)
+- [ ] API settles payment on blockchain
+- [ ] API returns service response
 - [ ] Response includes transaction hash
 - [ ] USDC transferred to merchant wallet
 
 ## Performance Testing
 
-Test agent under load:
+Test API under load:
 
 ```bash
 # Install apache bench
@@ -396,11 +396,11 @@ Create `request.json`:
 
 ## Security Testing
 
-- [ ] Agent rejects requests without payment
-- [ ] Agent validates payment signatures
-- [ ] Agent checks payment amounts
-- [ ] Agent verifies network matches
-- [ ] Agent prevents replay attacks (nonce checking)
+- [ ] API rejects requests without payment
+- [ ] API validates payment signatures
+- [ ] API checks payment amounts
+- [ ] API verifies network matches
+- [ ] API prevents replay attacks (nonce checking)
 - [ ] Private keys never logged or exposed
 - [ ] HTTPS in production
 - [ ] Rate limiting implemented
@@ -422,6 +422,6 @@ After successful testing:
 If tests fail:
 - Check the [README.md](./README.md)
 - Review [RPC_CONFIGURATION.md](./RPC_CONFIGURATION.md)
-- Check agent logs
+- Check API logs
 - Verify environment variables
-- Test facilitator connectivity
+- Test blockchain connectivity

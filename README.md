@@ -1,21 +1,24 @@
-# x402 AI Agent
+# x402 Developer Starter Kit
 
-A basic AI agent that charges $0.10 in USDC to process requests using the x402 payment protocol.
+A starter kit for building paid APIs using the x402 payment protocol. Includes an OpenAI integration as a demonstration example.
+
+> To deploy to EigenCompute, follow [these steps](DEPLOYING_TO_EIGENCOMPUTE.md).
 
 ## Overview
 
-This agent demonstrates how to integrate x402 payments with an AI service. It:
+This starter kit demonstrates how to build a paid API using x402 payments. It:
 
-1. Receives user requests
-2. Requires payment of $0.10 USDC before processing
-3. Processes requests using OpenAI GPT-4
-4. Returns AI-generated responses after payment is verified
+1. Receives API requests
+2. Requires payment (of $0.10 USDC) before processing
+3. Verifies and settles payments on-chain
+4. Processes requests (using OpenAI as an example)
+5. Returns responses after payment is confirmed
 
 ## Architecture
 
-The agent consists of three main components:
+The API consists of three main components:
 
-- **SimpleAgent**: Core agent logic that processes requests using OpenAI
+- **ExampleService**: Example service logic that processes requests using OpenAI (replace with your own service implementation)
 - **MerchantExecutor**: Handles payment verification and settlement using `x402` types with direct EIP-3009 settlement via `ethers`
 - **Server**: Express HTTP server that orchestrates payment validation and request processing
 
@@ -23,7 +26,7 @@ The agent consists of three main components:
 
 - Node.js 18 or higher
 - A wallet with some ETH for gas fees (on your chosen network)
-- An OpenAI API key
+- An OpenAI API key (for the example implementation - replace with your own API)
 - A wallet address to receive USDC payments
 
 ## Setup
@@ -61,12 +64,12 @@ PAY_TO_ADDRESS=0xYourWalletAddress
 NETWORK=base-sepolia
 
 # OpenAI Configuration
-# Your OpenAI API key for AI processing
+# Your OpenAI API key for the example service (replace with your own API configuration)
 OPENAI_API_KEY=your_openai_api_key_here
 
 # Optional: RPC URL for direct blockchain interaction
 # Set this (along with PRIVATE_KEY) to enable direct settlement.
-# If omitted and NETWORK is "base" or "base-sepolia", the agent will use Coinbase's public RPC.
+# If omitted and NETWORK is "base" or "base-sepolia", the API will use Coinbase's public RPC.
 # RPC_URL=https://base-sepolia.g.alchemy.com/v2/your-api-key
 
 # Optional: Debug logging
@@ -79,11 +82,11 @@ X402_DEBUG=true
 - Never commit your `.env` file to version control
 
 **Direct Settlement:**
-- If you set `PRIVATE_KEY` (and optionally `RPC_URL`), the agent verifies the EIP-3009 signature locally with `ethers` and calls `transferWithAuthorization()` on the USDC contract directly
-- If `RPC_URL` is omitted, the agent will use public RPC endpoints for Base/Base Sepolia
+- If you set `PRIVATE_KEY` (and optionally `RPC_URL`), the API verifies the EIP-3009 signature locally with `ethers` and calls `transferWithAuthorization()` on the USDC contract directly
+- If `RPC_URL` is omitted, the API will use public RPC endpoints for Base/Base Sepolia
 - Omit `PRIVATE_KEY` to disable automatic settlement (payments remain verified but you can plug in your own settlement flow)
 
-## Running the Agent
+## Running the API
 
 ### Development Mode
 
@@ -104,7 +107,7 @@ The server will start on `http://localhost:3000` (or your configured PORT).
 
 ### Health Check
 
-Check if the agent is running:
+Check if the API is running:
 
 ```bash
 curl http://localhost:3000/health
@@ -114,7 +117,7 @@ Response:
 ```json
 {
   "status": "healthy",
-  "service": "x402-ai-agent",
+  "service": "x402-payment-api",
   "version": "1.0.0",
   "payment": {
     "address": "0xYourAddress...",
@@ -124,9 +127,9 @@ Response:
 }
 ```
 
-### Testing the Agent
+### Testing the API
 
-We provide multiple ways to test the agent:
+We provide multiple ways to test the API:
 
 #### 1. Quick Test Script
 
@@ -147,7 +150,7 @@ npm test
 ```
 
 This will:
-- Check agent health
+- Check API health
 - Test unpaid requests (returns 402)
 - Test paid requests (if CLIENT_PRIVATE_KEY is configured)
 - Show the complete payment flow
@@ -226,14 +229,14 @@ For a complete client example, see the [`x402` library documentation](https://ww
 
 ### Payment Flow
 
-1. **Client sends request** → Agent receives the request
-2. **Agent requires payment** → Returns 402 with payment requirements
+1. **Client sends request** → API receives the request
+2. **API requires payment** → Returns 402 with payment requirements
 3. **Client signs payment** → Creates EIP-3009 authorization
-4. **Client submits payment** → Sends signed payment back to agent
-5. **Agent verifies payment** → Checks signature and authorization
-6. **Agent processes request** → Calls OpenAI API
-7. **Agent settles payment** → Completes blockchain transaction
-8. **Agent returns response** → Sends AI-generated response
+4. **Client submits payment** → Sends signed payment back to API
+5. **API verifies payment** → Checks signature and authorization
+6. **API processes request** → Calls your service (OpenAI in this example)
+7. **API settles payment** → Completes blockchain transaction
+8. **API returns response** → Sends the service response
 
 ### Payment Verification
 
@@ -251,10 +254,10 @@ For a complete client example, see the [`x402` library documentation](https://ww
 ### Project Structure
 
 ```
-agent/
+x402-developer-starter-kit/
 ├── src/
 │   ├── server.ts                     # Express server and endpoints
-│   ├── SimpleAgent.ts                # AI agent logic
+│   ├── ExampleService.ts             # Example service logic (replace with your own)
 │   ├── MerchantExecutor.ts           # Payment verification & settlement helpers
 │   ├── x402Types.ts                  # Shared task/message types
 │   └── testClient.ts                 # Test client for development
@@ -263,7 +266,7 @@ agent/
 ├── .env.example
 ├── README.md
 ├── TESTING.md
-└── test-agent.sh
+└── test-request.sh
 ```
 
 ### Building
@@ -312,7 +315,8 @@ Make sure you've set `PAY_TO_ADDRESS` in your `.env` file to your wallet address
 If you hit OpenAI rate limits, consider:
 - Using `gpt-3.5-turbo` instead of `gpt-4o-mini`
 - Implementing request queuing
-- Adding rate limiting to your agent
+- Adding rate limiting to your API
+- Replacing OpenAI with your own service
 
 ## Security Considerations
 
@@ -325,6 +329,7 @@ If you hit OpenAI rate limits, consider:
 
 ## Next Steps
 
+- Replace the example OpenAI service with your own API logic
 - Implement request queuing for high volume
 - Add support for different payment tiers
 - Create a web client interface

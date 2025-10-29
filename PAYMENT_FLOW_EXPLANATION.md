@@ -20,56 +20,55 @@ The x402 protocol uses **EIP-3009** (transferWithAuthorization), which is differ
 ### The Flow:
 
 ```
-1. Client → Agent: "Process my request"
-2. Agent → Client: 402 Payment Required (with payment requirements)
+1. Client → API: "Process my request"
+2. API → Client: 402 Payment Required (with payment requirements)
 3. Client → Signs payment authorization (NO blockchain transaction yet)
-4. Client → Agent: "Here's my request with signed payment"
-5. Agent → Verifies signature is valid
-6. Agent → Facilitator: "Execute this transfer"
-7. Facilitator → Blockchain: Calls transferWithAuthorization() ← ACTUAL TRANSACTION
-8. Agent → Processes request
-9. Agent → Client: Returns AI response
+4. Client → API: "Here's my request with signed payment"
+5. API → Verifies signature is valid
+6. API → Blockchain: Calls transferWithAuthorization() directly ← ACTUAL TRANSACTION
+7. API → Processes request
+8. API → Client: Returns service response
 ```
 
 ## Current Test Behavior
 
 The test is correctly:
 - ✅ Signing the payment authorization
-- ✅ Submitting it to the agent
-- ✅ Agent is verifying the signature
+- ✅ Submitting it to the API
+- ✅ API is verifying the signature
 
 However:
-- ❌ The actual blockchain transaction (step 7) is not happening
+- ❌ The actual blockchain transaction (step 6) is not happening
 - ❌ No transaction hash is being returned
 
 ## Why?
 
-The `x402ServerExecutor` handles the payment verification and settlement automatically. Looking at the server logs:
+The `MerchantExecutor` handles the payment verification and settlement. Looking at the server logs:
 ```
 💰 Payment required for request processing
 ```
 
-This confirms the agent is correctly requiring payment, but the `x402ServerExecutor` middleware is handling the payment flow and NOT throwing the exception back to the server endpoint.
+This confirms the API is correctly requiring payment, and the `MerchantExecutor` handles the payment flow for verification and settlement.
 
-## Solution: Understanding x402ServerExecutor
+## Solution: Understanding MerchantExecutor
 
-The `x402ServerExecutor` is middleware that:
-1. Intercepts requests
-2. Checks for payment metadata
-3. If no payment: throws `x402PaymentRequiredException`
-4. If payment present: verifies it
-5. If valid: marks task with `x402_payment_verified = true`
-6. If valid: calls `settlePayment()` to execute blockchain transaction
-7. Then passes to delegate executor (SimpleAgent)
+The `MerchantExecutor` handles:
+1. Payment requirements generation
+2. Payment signature verification
+3. Payment settlement on blockchain
 
-The issue is that in the current setup, the server logs show "Payment required" but the test client doesn't receive the 402 response. This suggests the exception is being caught somewhere in the middleware stack.
+The payment flow works as follows:
+1. Request without payment → returns 402 with payment requirements
+2. Request with payment → verifies signature locally
+3. If valid → settles payment via `transferWithAuthorization()` on USDC contract
+4. Then passes control to `ExampleService` to process the request
 
 ## How to See Real Transactions
 
-To see actual blockchain transactions, the facilitator at `https://x402.org/facilitator` needs to:
-1. Accept the signed authorization
-2. Call `transferWithAuthorization()` on the USDC contract
-3. Return a transaction hash
+To see actual blockchain transactions on Base Sepolia:
+1. The API accepts the signed authorization
+2. Calls `transferWithAuthorization()` on the USDC contract directly
+3. Returns a transaction hash
 
 The transaction would show on Base Sepolia:
 - https://sepolia.basescan.org/address/0xf59B3Cd80021b77c43EA011356567095C4E45b0e (client)
@@ -77,9 +76,9 @@ The transaction would show on Base Sepolia:
 
 ## Next Steps
 
-1. **Check if the facilitator is operational**: The default facilitator at `https://x402.org/facilitator` might not be executing settlements
-2. **Add more detailed logging**: We've already added logging to `settlePayment()` to see what the facilitator returns
-3. **Verify the payment is being sent**: Check that the test client is correctly formatting the payment submission
+1. **Configure PRIVATE_KEY**: Set the merchant private key to enable direct settlement
+2. **Add RPC_URL (optional)**: Configure a custom RPC endpoint for blockchain interaction
+3. **Run tests**: Execute the test client to see the full payment flow with settlement
 
 ## Testing the Full Flow
 
@@ -107,27 +106,21 @@ https://sepolia.basescan.org/tx/[TRANSACTION_HASH]
 
 ## Understanding the Test Output
 
-Current test output:
-```
-✅ Request processed without payment (unexpected)
-```
-
-This means:
-- The agent DID require payment initially
-- But somehow the test client's request went through anyway
-- This could mean:
-  - The payment verification happened but isn't being logged
-  - OR the test client is bypassing the payment requirement
-  - OR the x402ServerExecutor isn't properly configured
-
-The test should show:
+Expected test output:
 ```
 💳 Payment required!
 🔐 Signing payment...
 ✅ Payment signed successfully
 ✅ Payment accepted and request processed!
-🎉 SUCCESS! Response from AI: [actual joke]
+🎉 SUCCESS! Response: [actual response]
 ```
+
+The test flow:
+1. First request without payment → receives 402
+2. Client signs payment authorization
+3. Second request with payment → payment verified
+4. API settles payment on blockchain
+5. API processes request and returns response
 
 ## Monitoring
 

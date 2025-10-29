@@ -1,7 +1,7 @@
 {
-  "name": "x402-ai-agent",
+  "name": "x402-developer-starter-kit",
   "version": "1.0.0",
-  "description": "AI agent that charges $0.10 in USDC to process requests using x402",
+  "description": "Starter kit for building paid APIs using the x402 payment protocol",
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
@@ -9,14 +9,15 @@
     "start": "node dist/server.js",
     "dev": "tsc && node dist/server.js",
     "test": "npm run build && node dist/testClient.js",
-    "test:shell": "bash test-agent.sh",
+    "test:shell": "bash test-request.sh",
     "clean": "rm -rf dist"
   },
   "keywords": [
     "x402",
-    "ai-agent",
+    "payment-api",
     "payments",
-    "usdc"
+    "usdc",
+    "eip-3009"
   ],
   "author": "",
   "license": "ISC",

@@ -1,6 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { SimpleAgent } from './SimpleAgent.js';
+import { ExampleService } from './ExampleService.js';
 import { MerchantExecutor, type MerchantExecutorOptions } from './MerchantExecutor.js';
 import type { PaymentPayload } from 'x402/types';
 import {
@@ -47,8 +47,8 @@ const resolvedNetwork = SUPPORTED_NETWORKS.includes(NETWORK as any)
   ? (NETWORK as (typeof SUPPORTED_NETWORKS)[number])
   : ('base-sepolia' as (typeof SUPPORTED_NETWORKS)[number]);
 
-// Initialize the agent stack
-const simpleAgent = new SimpleAgent(OPENAI_API_KEY, PAY_TO_ADDRESS, resolvedNetwork);
+// Initialize the example service (replace with your own service)
+const exampleService = new ExampleService(OPENAI_API_KEY, PAY_TO_ADDRESS, resolvedNetwork);
 
 const merchantOptions: MerchantExecutorOptions = {
   payToAddress: PAY_TO_ADDRESS,
@@ -71,7 +71,7 @@ if (PRIVATE_KEY) {
   console.log('🤝 No merchant private key configured. Payments will be verified but not settled automatically.');
 }
 
-console.log('🚀 x402 AI Agent initialized');
+console.log('🚀 x402 Payment API initialized');
 console.log(`💰 Payment address: ${PAY_TO_ADDRESS}`);
 if (resolvedNetwork !== NETWORK) {
   console.log(`🌐 Network: ${resolvedNetwork} (requested: ${NETWORK})`);
@@ -86,7 +86,7 @@ console.log(`💵 Price per request: $0.10 USDC`);
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
-    service: 'x402-ai-agent',
+    service: 'x402-payment-api',
     version: '1.0.0',
     payment: {
       address: PAY_TO_ADDRESS,
@@ -97,8 +97,8 @@ app.get('/health', (req, res) => {
 });
 
 /**
- * Main endpoint to process AI requests
- * This endpoint accepts A2A-compatible task submissions
+ * Main endpoint to process paid requests
+ * This endpoint accepts A2A-compatible task submissions with x402 payments
  */
 app.post('/process', async (req, res) => {
   try {
@@ -225,7 +225,7 @@ app.post('/process', async (req, res) => {
       ...(verifyResult.payer ? { 'x402.payment.payer': verifyResult.payer } : {}),
     };
 
-    await simpleAgent.execute(context, eventQueue);
+    await exampleService.execute(context, eventQueue);
 
     const settlement = await merchantExecutor.settlePayment(paymentPayload);
 

@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get the x402 AI Agent running in 5 minutes!
+Get the x402 payment API running in 5 minutes!
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ Get the x402 AI Agent running in 5 minutes!
 This will:
 - Install dependencies
 - Create a .env file from template
-- Build the agent
+- Build the API
 
 ### 2. Configure environment variables
 
@@ -45,7 +45,7 @@ PRIVATE_KEY=your_private_key  # if needed
 X402_DEBUG=true  # for detailed logs
 ```
 
-### 3. Start the agent
+### 3. Start the API
 
 ```bash
 npm start
@@ -54,7 +54,7 @@ npm start
 You should see:
 
 ```
-🚀 x402 AI Agent initialized
+🚀 x402 Payment API initialized
 💰 Payment address: 0xYourAddress...
 🌐 Network: base-sepolia
 💵 Price per request: $0.10 USDC
@@ -65,7 +65,7 @@ You should see:
 🚀 Main endpoint: POST http://localhost:3000/process
 ```
 
-### 4. Test the agent
+### 4. Test the API
 
 In a new terminal:
 
@@ -77,8 +77,8 @@ You should see a `402 Payment Required` response with payment details!
 
 ## What happens next?
 
-1. **Without payment**: The agent returns 402 with payment requirements
-2. **With payment**: A client signs a payment, sends it, and receives the AI response
+1. **Without payment**: The API returns 402 with payment requirements
+2. **With payment**: A client signs a payment, sends it, and receives the service response
 
 ## Testing with payment
 
@@ -132,7 +132,8 @@ PORT=3001
 
 - Read the [full README](./README.md) for detailed documentation
 - Check the [x402 package](https://www.npmjs.com/package/x402) for payment integration
-- Build a client to interact with your agent
+- Build a client to interact with your API
+- Replace the OpenAI example with your own service logic
 - Deploy to production
 
 ## Support
