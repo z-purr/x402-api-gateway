@@ -26,6 +26,9 @@ const FACILITATOR_URL = process.env.FACILITATOR_URL;
 const FACILITATOR_API_KEY = process.env.FACILITATOR_API_KEY;
 const SERVICE_URL =
   process.env.SERVICE_URL || `http://localhost:${PORT}/process`;
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const RPC_URL = process.env.RPC_URL;
+const SETTLEMENT_MODE_ENV = process.env.SETTLEMENT_MODE?.toLowerCase();
 
 // Validate environment variables
 if (!OPENAI_API_KEY) {
@@ -49,6 +52,24 @@ const resolvedNetwork = SUPPORTED_NETWORKS.includes(NETWORK as any)
   ? (NETWORK as (typeof SUPPORTED_NETWORKS)[number])
   : ('base-sepolia' as (typeof SUPPORTED_NETWORKS)[number]);
 
+let settlementMode: 'facilitator' | 'direct';
+if (SETTLEMENT_MODE_ENV === 'local' || SETTLEMENT_MODE_ENV === 'direct') {
+  settlementMode = 'direct';
+} else if (SETTLEMENT_MODE_ENV === 'facilitator') {
+  settlementMode = 'facilitator';
+} else if (FACILITATOR_URL) {
+  settlementMode = 'facilitator';
+} else if (PRIVATE_KEY) {
+  settlementMode = 'direct';
+} else {
+  settlementMode = 'facilitator';
+}
+
+if (settlementMode === 'direct' && !PRIVATE_KEY) {
+  console.error('❌ SETTLEMENT_MODE=local requires PRIVATE_KEY to be configured');
+  process.exit(1);
+}
+
 // Initialize the example service (replace with your own service)
 const exampleService = new ExampleService(OPENAI_API_KEY, PAY_TO_ADDRESS, resolvedNetwork);
 
@@ -59,11 +80,21 @@ const merchantOptions: MerchantExecutorOptions = {
   facilitatorUrl: FACILITATOR_URL,
   facilitatorApiKey: FACILITATOR_API_KEY,
   resourceUrl: SERVICE_URL,
+  settlementMode,
+  rpcUrl: RPC_URL,
+  privateKey: PRIVATE_KEY,
 };
 
 const merchantExecutor = new MerchantExecutor(merchantOptions);
 
-if (FACILITATOR_URL) {
+if (settlementMode === 'direct') {
+  console.log('🧩 Using local settlement (direct EIP-3009 via RPC)');
+  if (RPC_URL) {
+    console.log(`🔌 RPC endpoint: ${RPC_URL}`);
+  } else {
+    console.log('🔌 RPC endpoint: using default for selected network');
+  }
+} else if (FACILITATOR_URL) {
   console.log(`🌐 Using custom facilitator: ${FACILITATOR_URL}`);
 } else {
   console.log('🌐 Using default facilitator: https://x402.org/facilitator');

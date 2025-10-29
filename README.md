@@ -65,6 +65,11 @@ NETWORK=base-sepolia
 # FACILITATOR_URL=https://your-custom-facilitator.com
 # FACILITATOR_API_KEY=your_api_key_if_required
 
+# Local Settlement (optional)
+# SETTLEMENT_MODE=local
+# PRIVATE_KEY=your_private_key_here
+# RPC_URL=https://base-sepolia.g.alchemy.com/v2/your-api-key
+
 # Public Service URL (optional)
 # Used in payment requirements so the facilitator sees a fully-qualified resource URL
 # SERVICE_URL=http://localhost:3000/process
@@ -81,10 +86,11 @@ OPENAI_API_KEY=your_openai_api_key_here
 X402_DEBUG=true
 ```
 
-**Facilitator:**
-- By default the API uses the hosted facilitator at `https://x402.org/facilitator` for verification and settlement
-- Set `FACILITATOR_URL` (and optionally `FACILITATOR_API_KEY`) to use a different facilitator instance
-- Update `SERVICE_URL` if clients will reach your API through a different hostname
+**Settlement Modes:**
+- Default: no extra config, uses the hosted facilitator at `https://x402.org/facilitator`
+- Local (direct): set `SETTLEMENT_MODE=local`, provide `PRIVATE_KEY`, and optionally override `RPC_URL` for your network
+- Custom facilitator: set `FACILITATOR_URL` (and `FACILITATOR_API_KEY` if needed) to call a different facilitator endpoint (e.g., one you host yourself)
+- Update `SERVICE_URL` if clients reach your API through a different hostname so the payment requirement has a fully-qualified resource URL
 
 **Important:**
 - `PAY_TO_ADDRESS` should be your wallet address where you want to receive USDC payments
@@ -245,7 +251,12 @@ For a complete client example, see the [`x402` library documentation](https://ww
 
 ### Payment Verification
 
-`src/MerchantExecutor.ts` sends the payment payload to the configured x402 facilitator. The facilitator validates the authorization, performs settlement on-chain, and returns the resulting transaction details. Make sure `SERVICE_URL` reflects the public URL of your paid endpoint so the facilitator can validate the `resource` field. If you need custom logic, point the executor at your own facilitator implementation with `FACILITATOR_URL`.
+`src/MerchantExecutor.ts` sends the payment payload either to the configured x402 facilitator **or** verifies/settles locally, depending on the settlement mode:
+
+- **Facilitator mode** (default): forwards payloads to `https://x402.org/facilitator` or the URL set in `FACILITATOR_URL`
+- **Local mode**: verifies signatures with `ethers.verifyTypedData` and submits `transferWithAuthorization` via your configured RPC/PRIVATE_KEY
+
+Make sure `SERVICE_URL` reflects the public URL of your paid endpoint so the facilitator can validate the `resource` field when using facilitator mode.
 
 ### Error Handling
 
@@ -313,7 +324,8 @@ Make sure you've set `PAY_TO_ADDRESS` in your `.env` file to your wallet address
 - Verify your wallet has USDC approval set
 - Make sure the payment amount matches ($0.10)
 - If signature verification fails, review the logged invalid reason and confirm the client signed the latest payment requirements
-- For settlement errors, confirm the facilitator is reachable and that any `FACILITATOR_URL` / `FACILITATOR_API_KEY` settings are correct
+- For facilitator settlement errors, confirm the facilitator is reachable and that any `FACILITATOR_URL` / `FACILITATOR_API_KEY` settings are correct
+- For local settlement errors, ensure your `PRIVATE_KEY` has gas and that the configured `RPC_URL` (or the network default) is responsive
 
 ### OpenAI rate limits
 

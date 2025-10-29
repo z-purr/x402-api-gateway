@@ -55,7 +55,24 @@ The facilitator service:
 
 The default facilitator handles everything for you.
 
-### Option 2: Custom Facilitator
+### Option 2: Local Settlement (Direct Mode)
+
+If you want to keep settlement inside this server (no facilitator call), enable the built-in direct flow:
+
+```env
+SETTLEMENT_MODE=local
+PRIVATE_KEY=your_private_key_here
+# Optional - override default RPC endpoint for the selected network
+RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
+```
+
+With these variables set, the agent:
+- Verifies the EIP-3009 payload locally
+- Uses your RPC endpoint to call `transferWithAuthorization` on the USDC contract
+
+Make sure the wallet behind `PRIVATE_KEY` holds the gas token for the selected network.
+
+### Option 3: Custom Facilitator
 
 If you want to use a different facilitator service, set:
 
@@ -68,7 +85,7 @@ Your custom facilitator would need to implement the x402 facilitator API:
 - `POST /verify` - Verify payment signatures
 - `POST /settle` - Settle payments on-chain
 
-### Option 3: Self-Hosted Facilitator
+### Option 4: Self-Hosted Facilitator
 
 To run your own facilitator with custom RPC:
 
@@ -78,21 +95,21 @@ To run your own facilitator with custom RPC:
    # In your facilitator's config
    RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
    ```
-3. **Point your agent to your facilitator**:
+3. **Point this agent to your facilitator** (for example, if it runs locally at `http://localhost:4000`):
    ```env
    # In agent/.env
    FACILITATOR_URL=https://your-facilitator.yoursite.com
    ```
 
-### Option 4: Direct Blockchain Integration (Advanced)
+### Option 5: Direct Blockchain Integration (Advanced)
 
-If you want to bypass the facilitator and interact with the blockchain directly, you would need to:
+Local settlement mode already performs on-chain verification/settlement for USDC via EIP-3009. If you need more control (additional assets, alternative schemes), you can still implement your own executor:
 
-1. Replace the bundled `MerchantExecutor` with your own implementation
-2. Use `ethers` (or another SDK) together with your RPC URL
-3. Implement payment verification and settlement logic for the schemes you support
+1. Replace or extend `src/MerchantExecutor.ts`
+2. Use `ethers` (or another SDK) together with your RPC URL(s)
+3. Add any custom verification/settlement logic your flow requires
 
-The starter kit ships with a facilitator-based executor. Use it as a reference for how to construct payment requirements and wire results back to the server. If you need full control, build a new executor that verifies signatures locally and submits settlements directly on-chain.
+Use the bundled executor as a reference for how to construct payment requirements, log settlement details, and surface errors back to the server.
 
 ## RPC Providers
 
@@ -216,7 +233,8 @@ Consider these options:
 **Quick Answer:**
 - RPC URL is **not required** for basic setup
 - The default facilitator at `https://x402.org/facilitator` handles blockchain interactions
-- Only configure RPC if you're running a custom facilitator or doing direct blockchain integration
+- Set `SETTLEMENT_MODE=local` (with `PRIVATE_KEY`/`RPC_URL`) for on-chain settlement inside this server
+- Use `FACILITATOR_URL` to point at a custom facilitator endpoint
 
 **Environment Variables:**
 ```env
@@ -224,13 +242,14 @@ Consider these options:
 OPENAI_API_KEY=your_key
 PAY_TO_ADDRESS=0xYourAddress
 
-# Optional - only if using custom facilitator
+# Optional - local (direct) settlement
+SETTLEMENT_MODE=local
+PRIVATE_KEY=your_private_key
+RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
+
+# Optional - custom facilitator endpoint
 FACILITATOR_URL=https://your-facilitator.com
 FACILITATOR_API_KEY=your_key
-
-# Optional - only if implementing custom blockchain interaction
-RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
-PRIVATE_KEY=your_private_key
 
 # Optional - ensure payment requirements include a fully-qualified endpoint URL
 SERVICE_URL=https://your-domain.com/process
