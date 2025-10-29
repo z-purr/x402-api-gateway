@@ -86,6 +86,17 @@ OPENAI_API_KEY=your_openai_api_key_here
 X402_DEBUG=true
 ```
 
+## Quickstart
+
+1. **Run the API**
+   ```bash
+   npm run dev
+   ```
+2. **Run the test suite (in another terminal)**
+   ```bash
+   npm test
+   ```
+
 **Settlement Modes:**
 - Default: no extra config, uses the hosted facilitator at `https://x402.org/facilitator`
 - Local (direct): set `SETTLEMENT_MODE=local`, provide `PRIVATE_KEY`, and optionally override `RPC_URL` for your network
@@ -113,6 +124,16 @@ npm start
 ```
 
 The server will start on `http://localhost:3000` (or your configured PORT).
+
+### Docker
+
+```bash
+# Build the image
+docker build -t x402-starter .
+
+# Run the container (make sure .env has the required variables)
+docker run --env-file .env -p 3000:3000 x402-starter
+```
 
 ## Usage
 
