@@ -64,6 +64,10 @@ SETTLEMENT_MODE=local
 PRIVATE_KEY=your_private_key_here
 # Optional - override default RPC endpoint for the selected network
 RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
+# Provide ASSET_ADDRESS/ASSET_NAME if using a non-built-in network
+ASSET_ADDRESS=0xTokenAddress
+ASSET_NAME=USDC
+CHAIN_ID=84532
 ```
 
 With these variables set, the agent:
@@ -79,6 +83,10 @@ If you want to use a different facilitator service, set:
 ```env
 FACILITATOR_URL=https://your-custom-facilitator.com
 FACILITATOR_API_KEY=your_api_key_if_required
+# Provide ASSET_ADDRESS/ASSET_NAME if the facilitator expects a different asset for your network
+ASSET_ADDRESS=0xTokenAddress
+ASSET_NAME=USDC
+CHAIN_ID=84532
 ```
 
 Your custom facilitator would need to implement the x402 facilitator API:
@@ -246,10 +254,16 @@ PAY_TO_ADDRESS=0xYourAddress
 SETTLEMENT_MODE=local
 PRIVATE_KEY=your_private_key
 RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_KEY
+CHAIN_ID=84532
 
 # Optional - custom facilitator endpoint
 FACILITATOR_URL=https://your-facilitator.com
 FACILITATOR_API_KEY=your_key
+
+# Optional - asset overrides (required if NETWORK isn't base/base-sepolia/polygon/polygon-amoy)
+ASSET_ADDRESS=0xTokenAddress
+ASSET_NAME=USDC
+EXPLORER_URL=https://explorer.your-network.org
 
 # Optional - ensure payment requirements include a fully-qualified endpoint URL
 SERVICE_URL=https://your-domain.com/process

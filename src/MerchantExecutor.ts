@@ -1,4 +1,8 @@
-import type { PaymentPayload, PaymentRequirements } from 'x402/types';
+import type {
+  Network,
+  PaymentPayload,
+  PaymentRequirements,
+} from 'x402/types';
 import { ethers } from 'ethers';
 
 const DEFAULT_FACILITATOR_URL = 'https://x402.org/facilitator';
@@ -14,48 +18,106 @@ const TRANSFER_AUTH_TYPES = {
   ],
 };
 
-type SupportedNetwork = 'base' | 'base-sepolia' | 'polygon' | 'polygon-amoy';
+export type SettlementMode = 'facilitator' | 'direct';
 
-const NETWORK_CONFIG: Record<
-  SupportedNetwork,
+type BuiltInNetwork =
+  | 'base'
+  | 'base-sepolia'
+  | 'polygon'
+  | 'polygon-amoy'
+  | 'avalanche-fuji'
+  | 'avalanche'
+  | 'iotex'
+  | 'sei'
+  | 'sei-testnet'
+  | 'peaq'
+  | 'solana-devnet'
+  | 'solana';
+
+const BUILT_IN_NETWORKS: Record<
+  BuiltInNetwork,
   {
-    chainId: number;
-    usdcAddress: string;
-    usdcName: string;
-    explorer: string;
+    chainId?: number;
+    assetAddress: string;
+    assetName: string;
+    explorer?: string;
   }
 > = {
   base: {
     chainId: 8453,
-    usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    usdcName: 'USD Coin',
+    assetAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    assetName: 'USD Coin',
     explorer: 'https://basescan.org',
   },
   'base-sepolia': {
     chainId: 84532,
-    usdcAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-    usdcName: 'USDC',
+    assetAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    assetName: 'USDC',
     explorer: 'https://sepolia.basescan.org',
   },
   polygon: {
     chainId: 137,
-    usdcAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-    usdcName: 'USD Coin',
+    assetAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+    assetName: 'USD Coin',
     explorer: 'https://polygonscan.com',
   },
   'polygon-amoy': {
     chainId: 80002,
-    usdcAddress: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
-    usdcName: 'USDC',
+    assetAddress: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
+    assetName: 'USDC',
     explorer: 'https://amoy.polygonscan.com',
+  },
+  'avalanche-fuji': {
+    chainId: 43113,
+    assetAddress: '0x5425890298aed601595a70AB815c96711a31Bc65',
+    assetName: 'USD Coin',
+    explorer: 'https://testnet.snowtrace.io',
+  },
+  avalanche: {
+    chainId: 43114,
+    assetAddress: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+    assetName: 'USD Coin',
+    explorer: 'https://snowtrace.io',
+  },
+  iotex: {
+    chainId: 4689,
+    assetAddress: '0xcdf79194c6c285077a58da47641d4dbe51f63542',
+    assetName: 'Bridged USDC',
+    explorer: 'https://iotexscan.io',
+  },
+  sei: {
+    chainId: 1329,
+    assetAddress: '0xe15fc38f6d8c56af07bbcbe3baf5708a2bf42392',
+    assetName: 'USDC',
+    explorer: 'https://sei.explorers.guru',
+  },
+  'sei-testnet': {
+    chainId: 1328,
+    assetAddress: '0x4fcf1784b31630811181f670aea7a7bef803eaed',
+    assetName: 'USDC',
+    explorer: 'https://testnet.sei.explorers.guru',
+  },
+  peaq: {
+    chainId: 3338,
+    assetAddress: '0xbbA60da06c2c5424f03f7434542280FCAd453d10',
+    assetName: 'USDC',
+    explorer: 'https://scan.peaq.network',
+  },
+  'solana-devnet': {
+    assetAddress: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+    assetName: 'USDC',
+    explorer: 'https://explorer.solana.com/?cluster=devnet',
+  },
+  solana: {
+    assetAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    assetName: 'USDC',
+    explorer: 'https://explorer.solana.com',
   },
 };
 
-export type SettlementMode = 'facilitator' | 'direct';
-
 export interface MerchantExecutorOptions {
   payToAddress: string;
-  network: SupportedNetwork;
+  network: Network;
   price: number;
   facilitatorUrl?: string;
   facilitatorApiKey?: string;
@@ -63,6 +125,10 @@ export interface MerchantExecutorOptions {
   settlementMode?: SettlementMode;
   rpcUrl?: string;
   privateKey?: string;
+  assetAddress?: string;
+  assetName?: string;
+  explorerUrl?: string;
+  chainId?: number;
 }
 
 export interface VerifyResult {
@@ -87,20 +153,42 @@ export class MerchantExecutor {
   private readonly facilitatorApiKey?: string;
   private settlementProvider?: ethers.JsonRpcProvider;
   private settlementWallet?: ethers.Wallet;
+  private readonly network: Network;
+  private readonly assetName: string;
+  private readonly chainId?: number;
 
   constructor(options: MerchantExecutorOptions) {
-    const networkConfig = NETWORK_CONFIG[options.network];
+    const builtinConfig = BUILT_IN_NETWORKS[
+      options.network as BuiltInNetwork
+    ] as (typeof BUILT_IN_NETWORKS)[BuiltInNetwork] | undefined;
 
-    if (!networkConfig) {
-      throw new Error(`Unsupported network "${options.network}"`);
+    const assetAddress =
+      options.assetAddress ?? builtinConfig?.assetAddress;
+    const assetName = options.assetName ?? builtinConfig?.assetName;
+    const chainId = options.chainId ?? builtinConfig?.chainId;
+    const explorerUrl = options.explorerUrl ?? builtinConfig?.explorer;
+
+    if (!assetAddress) {
+      throw new Error(
+        `Asset address must be provided for network "${options.network}". Set ASSET_ADDRESS in the environment.`
+      );
     }
 
-    this.explorerUrl = networkConfig.explorer;
+    if (!assetName) {
+      throw new Error(
+        `Asset name must be provided for network "${options.network}". Set ASSET_NAME in the environment.`
+      );
+    }
+
+    this.network = options.network;
+    this.assetName = assetName;
+    this.chainId = chainId;
+    this.explorerUrl = explorerUrl;
 
     this.requirements = {
       scheme: 'exact',
       network: options.network,
-      asset: networkConfig.usdcAddress,
+      asset: assetAddress,
       payTo: options.payToAddress,
       maxAmountRequired: this.getAtomicAmount(options.price),
       resource: options.resourceUrl || 'https://merchant.local/process',
@@ -108,7 +196,7 @@ export class MerchantExecutor {
       mimeType: 'application/json',
       maxTimeoutSeconds: 600,
       extra: {
-        name: networkConfig.usdcName,
+        name: assetName,
         version: '2',
       },
     };
@@ -118,6 +206,12 @@ export class MerchantExecutor {
       (options.facilitatorUrl || !options.privateKey ? 'facilitator' : 'direct');
 
     if (this.mode === 'direct') {
+      if (options.network === 'solana' || options.network === 'solana-devnet') {
+        throw new Error(
+          'Direct settlement is only supported on EVM networks.'
+        );
+      }
+
       if (!options.privateKey) {
         throw new Error(
           'Direct settlement requires PRIVATE_KEY to be configured.'
@@ -133,6 +227,12 @@ export class MerchantExecutor {
       if (!rpcUrl) {
         throw new Error(
           `Direct settlement requires an RPC URL for network "${options.network}".`
+        );
+      }
+
+       if (typeof chainId !== 'number') {
+        throw new Error(
+          `Direct settlement requires a numeric CHAIN_ID for network "${options.network}".`
         );
       }
 
@@ -477,22 +577,15 @@ export class MerchantExecutor {
   }
 
   private buildEip712Domain(requirements: PaymentRequirements) {
-    const config = NETWORK_CONFIG[requirements.network as SupportedNetwork];
-    if (!config) {
-      throw new Error(
-        `Unsupported network "${requirements.network}" for direct settlement`
-      );
-    }
-
     return {
-      name: requirements.extra?.name || config.usdcName,
+      name: requirements.extra?.name || this.assetName,
       version: requirements.extra?.version || '2',
-      chainId: config.chainId,
+      chainId: this.chainId,
       verifyingContract: requirements.asset,
     };
   }
 
-  private getDefaultRpcUrl(network: SupportedNetwork): string | undefined {
+  private getDefaultRpcUrl(network: Network): string | undefined {
     switch (network) {
       case 'base':
         return 'https://mainnet.base.org';
@@ -502,6 +595,18 @@ export class MerchantExecutor {
         return 'https://polygon-rpc.com';
       case 'polygon-amoy':
         return 'https://rpc-amoy.polygon.technology';
+      case 'avalanche':
+        return 'https://api.avax.network/ext/bc/C/rpc';
+      case 'avalanche-fuji':
+        return 'https://api.avax-test.network/ext/bc/C/rpc';
+      case 'iotex':
+        return 'https://rpc.ankr.com/iotex';
+      case 'sei':
+        return 'https://sei-rpc.publicnode.com';
+      case 'sei-testnet':
+        return 'https://sei-testnet-rpc.publicnode.com';
+      case 'peaq':
+        return 'https://erpc.peaq.network';
       default:
         return undefined;
     }

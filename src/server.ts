@@ -2,7 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import { ExampleService } from './ExampleService.js';
 import { MerchantExecutor, type MerchantExecutorOptions } from './MerchantExecutor.js';
-import type { PaymentPayload } from 'x402/types';
+import type { Network, PaymentPayload } from 'x402/types';
 import {
   EventQueue,
   Message,
@@ -29,6 +29,26 @@ const SERVICE_URL =
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const RPC_URL = process.env.RPC_URL;
 const SETTLEMENT_MODE_ENV = process.env.SETTLEMENT_MODE?.toLowerCase();
+const ASSET_ADDRESS = process.env.ASSET_ADDRESS;
+const ASSET_NAME = process.env.ASSET_NAME;
+const EXPLORER_URL = process.env.EXPLORER_URL;
+const CHAIN_ID = process.env.CHAIN_ID
+  ? Number.parseInt(process.env.CHAIN_ID, 10)
+  : undefined;
+const SUPPORTED_NETWORKS: Network[] = [
+  'base',
+  'base-sepolia',
+  'polygon',
+  'polygon-amoy',
+  'avalanche',
+  'avalanche-fuji',
+  'iotex',
+  'sei',
+  'sei-testnet',
+  'peaq',
+  'solana',
+  'solana-devnet',
+];
 
 // Validate environment variables
 if (!OPENAI_API_KEY) {
@@ -41,16 +61,16 @@ if (!PAY_TO_ADDRESS) {
   process.exit(1);
 }
 
-const SUPPORTED_NETWORKS = ['base', 'base-sepolia', 'polygon', 'polygon-amoy'] as const;
-if (!SUPPORTED_NETWORKS.includes(NETWORK as any)) {
-  console.warn(
-    `⚠️  Network "${NETWORK}" is not explicitly supported. Falling back to "base-sepolia".`
+if (!SUPPORTED_NETWORKS.includes(NETWORK as Network)) {
+  console.error(
+    `❌ NETWORK "${NETWORK}" is not supported. Supported networks: ${SUPPORTED_NETWORKS.join(
+      ', '
+    )}`
   );
+  process.exit(1);
 }
 
-const resolvedNetwork = SUPPORTED_NETWORKS.includes(NETWORK as any)
-  ? (NETWORK as (typeof SUPPORTED_NETWORKS)[number])
-  : ('base-sepolia' as (typeof SUPPORTED_NETWORKS)[number]);
+const resolvedNetwork = NETWORK as Network;
 
 let settlementMode: 'facilitator' | 'direct';
 if (SETTLEMENT_MODE_ENV === 'local' || SETTLEMENT_MODE_ENV === 'direct') {
@@ -83,6 +103,10 @@ const merchantOptions: MerchantExecutorOptions = {
   settlementMode,
   rpcUrl: RPC_URL,
   privateKey: PRIVATE_KEY,
+  assetAddress: ASSET_ADDRESS,
+  assetName: ASSET_NAME,
+  explorerUrl: EXPLORER_URL,
+  chainId: CHAIN_ID,
 };
 
 const merchantExecutor = new MerchantExecutor(merchantOptions);
@@ -102,11 +126,7 @@ if (settlementMode === 'direct') {
 
 console.log('🚀 x402 Payment API initialized');
 console.log(`💰 Payment address: ${PAY_TO_ADDRESS}`);
-if (resolvedNetwork !== NETWORK) {
-  console.log(`🌐 Network: ${resolvedNetwork} (requested: ${NETWORK})`);
-} else {
-  console.log(`🌐 Network: ${resolvedNetwork}`);
-}
+console.log(`🌐 Network: ${resolvedNetwork}`);
 console.log(`💵 Price per request: $0.10 USDC`);
 
 /**

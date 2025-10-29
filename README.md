@@ -70,6 +70,12 @@ NETWORK=base-sepolia
 # PRIVATE_KEY=your_private_key_here
 # RPC_URL=https://base-sepolia.g.alchemy.com/v2/your-api-key
 
+# Custom Network Details (required if NETWORK is not base/base-sepolia/polygon/polygon-amoy)
+# ASSET_ADDRESS=0xTokenAddress
+# ASSET_NAME=USDC
+# EXPLORER_URL=https://explorer.your-network.org
+# CHAIN_ID=84532
+
 # Public Service URL (optional)
 # Used in payment requirements so the facilitator sees a fully-qualified resource URL
 # SERVICE_URL=http://localhost:3000/process
@@ -102,6 +108,7 @@ X402_DEBUG=true
 - Local (direct): set `SETTLEMENT_MODE=local`, provide `PRIVATE_KEY`, and optionally override `RPC_URL` for your network
 - Custom facilitator: set `FACILITATOR_URL` (and `FACILITATOR_API_KEY` if needed) to call a different facilitator endpoint (e.g., one you host yourself)
 - Update `SERVICE_URL` if clients reach your API through a different hostname so the payment requirement has a fully-qualified resource URL
+- If you set `NETWORK` to something other than `base`, `base-sepolia`, `polygon`, or `polygon-amoy`, provide `ASSET_ADDRESS`, `ASSET_NAME`, and (for local settlement) `CHAIN_ID`
 
 **Important:**
 - `PAY_TO_ADDRESS` should be your wallet address where you want to receive USDC payments
