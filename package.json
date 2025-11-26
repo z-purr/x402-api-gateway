@@ -1,5 +1,5 @@
 {
-  "name": "create-x402",
+  "name": "x402-starter-kit",
   "version": "0.0.1",
   "description": "Starter kit for building paid APIs using the x402 payment protocol",
   "main": "dist/server.js",
@@ -23,7 +23,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "x402": "^0.7.0",
     "dotenv": "^16.4.5",
     "ethers": "^6.15.0",
     "express": "^4.21.2",
