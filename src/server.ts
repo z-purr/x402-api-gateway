@@ -1,8 +1,14 @@
 import express from 'express';
 import dotenv from 'dotenv';
+
+// Polyfill BigInt serialization for JSON.stringify (required for Solana transactions)
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 import { ExampleService } from './ExampleService.js';
 import { MerchantExecutor, type MerchantExecutorOptions } from './MerchantExecutor.js';
-import type { Network, PaymentPayload } from 'x402/types';
+import type { PaymentPayload } from '@x402/core/types';
 import {
   EventQueue,
   Message,
@@ -50,7 +56,10 @@ const AI_MAX_TOKENS = process.env.AI_MAX_TOKENS
 const AI_SEED = process.env.AI_SEED
   ? Number.parseInt(process.env.AI_SEED, 10)
   : undefined;
-const SUPPORTED_NETWORKS: Network[] = [
+
+// Supported networks - both legacy names and CAIP-2 format
+const SUPPORTED_NETWORKS: string[] = [
+  // Legacy names (will be converted to CAIP-2)
   'base',
   'base-sepolia',
   'polygon',
@@ -63,6 +72,17 @@ const SUPPORTED_NETWORKS: Network[] = [
   'peaq',
   'solana',
   'solana-devnet',
+  // CAIP-2 format (eip155:chainId)
+  'eip155:8453',      // Base
+  'eip155:84532',     // Base Sepolia
+  'eip155:137',       // Polygon
+  'eip155:80002',     // Polygon Amoy
+  'eip155:43114',     // Avalanche
+  'eip155:43113',     // Avalanche Fuji
+  'eip155:4689',      // IoTeX
+  'eip155:1329',      // Sei
+  'eip155:1328',      // Sei Testnet
+  'eip155:3338',      // Peaq
 ];
 
 // Validate environment variables
@@ -88,16 +108,14 @@ if (!PAY_TO_ADDRESS) {
   process.exit(1);
 }
 
-if (!SUPPORTED_NETWORKS.includes(NETWORK as Network)) {
+// Check if network is in CAIP-2 format or legacy format
+const isValidNetwork = SUPPORTED_NETWORKS.includes(NETWORK) || NETWORK.includes(':');
+if (!isValidNetwork) {
   console.error(
-    `❌ NETWORK "${NETWORK}" is not supported. Supported networks: ${SUPPORTED_NETWORKS.join(
-      ', '
-    )}`
+    `❌ NETWORK "${NETWORK}" is not supported. Use legacy names (base, base-sepolia, etc.) or CAIP-2 format (eip155:8453, etc.)`
   );
   process.exit(1);
 }
-
-const resolvedNetwork = NETWORK as Network;
 
 let settlementMode: 'facilitator' | 'direct';
 if (SETTLEMENT_MODE_ENV === 'local' || SETTLEMENT_MODE_ENV === 'direct') {
@@ -129,7 +147,7 @@ const exampleService = new ExampleService({
       ? { 'x-api-key': (EIGENAI_API_KEY || OPENAI_API_KEY)! }
       : undefined,
   payToAddress: PAY_TO_ADDRESS,
-  network: resolvedNetwork,
+  network: NETWORK,
   model:
     AI_MODEL ??
     (AI_PROVIDER === 'eigenai' ? 'gpt-oss-120b-f16' : 'gpt-4o-mini'),
@@ -141,7 +159,7 @@ const exampleService = new ExampleService({
 // Initialize the example service (replace with your own service)
 const merchantOptions: MerchantExecutorOptions = {
   payToAddress: PAY_TO_ADDRESS,
-  network: resolvedNetwork,
+  network: NETWORK,
   price: 0.1,
   facilitatorUrl: FACILITATOR_URL,
   facilitatorApiKey: FACILITATOR_API_KEY,
@@ -157,6 +175,11 @@ const merchantOptions: MerchantExecutorOptions = {
 
 const merchantExecutor = new MerchantExecutor(merchantOptions);
 
+// Initialize the merchant executor (async for facilitator mode)
+async function initializeMerchant() {
+  await merchantExecutor.initialize();
+}
+
 if (settlementMode === 'direct') {
   console.log('🧩 Using local settlement (direct EIP-3009 via RPC)');
   if (RPC_URL) {
@@ -168,11 +191,14 @@ if (settlementMode === 'direct') {
   console.log(`🌐 Using custom facilitator: ${FACILITATOR_URL}`);
 } else {
   console.log('🌐 Using default facilitator: https://x402.org/facilitator');
+  console.log('⚠️  Note: Default facilitator only supports TESTNETS');
+  console.log('   For mainnet, run your own facilitator: npm run start:facilitator');
+  console.log('   Then set FACILITATOR_URL=http://localhost:4022');
 }
 
-console.log('🚀 x402 Payment API initialized');
+console.log('🚀 x402 v2 Payment API initialized');
 console.log(`💰 Payment address: ${PAY_TO_ADDRESS}`);
-console.log(`🌐 Network: ${resolvedNetwork}`);
+console.log(`🌐 Network: ${NETWORK}`);
 console.log(`💵 Price per request: $0.10 USDC`);
 
 /**
@@ -182,7 +208,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     service: 'x402-payment-api',
-    version: '1.0.0',
+    version: '2.0.0',
+    x402Version: 2,
     payment: {
       address: PAY_TO_ADDRESS,
       network: NETWORK,
@@ -405,10 +432,19 @@ app.post('/test', async (req, res) => {
   }
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`\n✅ Server running on http://localhost:${PORT}`);
-  console.log(`📖 Health check: http://localhost:${PORT}/health`);
-  console.log(`🧪 Test endpoint: POST http://localhost:${PORT}/test`);
-  console.log(`🚀 Main endpoint: POST http://localhost:${PORT}/process\n`);
+// Start the server with async initialization
+async function startServer() {
+  await initializeMerchant();
+  
+  app.listen(PORT, () => {
+    console.log(`\n✅ Server running on http://localhost:${PORT}`);
+    console.log(`📖 Health check: http://localhost:${PORT}/health`);
+    console.log(`🧪 Test endpoint: POST http://localhost:${PORT}/test`);
+    console.log(`🚀 Main endpoint: POST http://localhost:${PORT}/process\n`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error('❌ Failed to start server:', error);
+  process.exit(1);
 });

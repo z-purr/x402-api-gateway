@@ -1,13 +1,13 @@
 import { randomBytes } from 'crypto';
 import { Wallet } from 'ethers';
 import dotenv from 'dotenv';
-import type { PaymentPayload, PaymentRequirements } from 'x402/types';
+import type { PaymentPayload, PaymentRequirements } from '@x402/core/types';
 import { Message, Task } from './x402Types.js';
 
 dotenv.config();
 
 const AGENT_URL = process.env.AGENT_URL || 'http://localhost:3000';
-const CLIENT_PRIVATE_KEY = process.env.CLIENT_PRIVATE_KEY;
+const EVM_CLIENT_PRIVATE_KEY = process.env.EVM_CLIENT_PRIVATE_KEY;
 
 interface AgentResponse {
   success?: boolean;
@@ -29,12 +29,19 @@ const TRANSFER_AUTH_TYPES = {
   ],
 };
 
+// Map legacy network names to chain IDs
 const CHAIN_IDS: Record<string, number> = {
   base: 8453,
   'base-sepolia': 84532,
   ethereum: 1,
   polygon: 137,
   'polygon-amoy': 80002,
+  avalanche: 43114,
+  'avalanche-fuji': 43113,
+  iotex: 4689,
+  sei: 1329,
+  'sei-testnet': 1328,
+  peaq: 3338,
 };
 
 function selectPaymentRequirement(paymentRequired: any): PaymentRequirements {
@@ -50,9 +57,17 @@ function generateNonce(): string {
 }
 
 function getChainId(network: string): number {
+  // Handle CAIP-2 format (eip155:chainId)
+  if (network.startsWith('eip155:')) {
+    const chainId = parseInt(network.split(':')[1], 10);
+    if (!isNaN(chainId)) {
+      return chainId;
+    }
+  }
+  // Handle legacy network names
   const chainId = CHAIN_IDS[network];
   if (!chainId) {
-    throw new Error(`Unsupported network "${network}"`);
+    throw new Error(`Unsupported network "${network}". Use CAIP-2 format (eip155:8453) or a supported legacy name.`);
   }
   return chainId;
 }
@@ -62,7 +77,7 @@ function getChainId(network: string): number {
  * This generates a transferWithAuthorization signature that allows the merchant
  * to pull USDC from the payer's wallet on-chain.
  * 
- * @param paymentRequired - The payment requirements from the agent (x402 format)
+ * @param paymentRequired - The payment requirements from the agent (x402 v2 format)
  * @param wallet - The wallet that will sign the authorization
  * @returns A PaymentPayload containing the signature and authorization details
  */
@@ -72,19 +87,22 @@ async function createPaymentPayload(
 ): Promise<PaymentPayload> {
   const requirement = selectPaymentRequirement(paymentRequired);
 
+  // In v2, the amount field replaces maxAmountRequired
+  const amount = requirement.amount || (requirement as any).maxAmountRequired;
+  
   const now = Math.floor(Date.now() / 1000);
   const authorization = {
     from: wallet.address,
     to: requirement.payTo,
-    value: requirement.maxAmountRequired,
+    value: amount,
     validAfter: '0',
     validBefore: String(now + requirement.maxTimeoutSeconds),
     nonce: generateNonce(),
   };
 
   const domain = {
-    name: requirement.extra?.name || 'USDC',
-    version: requirement.extra?.version || '2',
+    name: (requirement.extra?.name as string) || 'USDC',
+    version: (requirement.extra?.version as string) || '2',
     chainId: getChainId(requirement.network),
     verifyingContract: requirement.asset,
   };
@@ -95,20 +113,24 @@ async function createPaymentPayload(
     authorization
   );
 
+  // Return x402 v2 format payload
   return {
-    x402Version: paymentRequired.x402Version ?? 1,
-    scheme: requirement.scheme,
-    network: requirement.network,
+    x402Version: paymentRequired.x402Version ?? 2,
+    resource: paymentRequired.resource || {
+      description: 'AI request processing service',
+      mimeType: 'application/json',
+    },
+    accepted: requirement,
     payload: {
       signature,
       authorization,
     },
-  };
+  } as PaymentPayload;
 }
 
 /**
  * Test client that can interact with the x402 AI agent
- * This demonstrates the complete payment flow
+ * This demonstrates the complete payment flow using x402 v2
  */
 export class TestClient {
   private wallet?: Wallet;
@@ -151,7 +173,7 @@ export class TestClient {
 
     // Check for A2A-style payment requirement in task metadata
     if (data.task?.status?.message?.metadata?.['x402.payment.required']) {
-      console.log('💳 Payment required (A2A style)!');
+      console.log('💳 Payment required (A2A style with x402 v2)!');
       return {
         error: 'Payment Required',
         x402: data.task.status.message.metadata['x402.payment.required'],
@@ -173,7 +195,7 @@ export class TestClient {
    */
   async sendPaidRequest(text: string): Promise<AgentResponse> {
     if (!this.wallet) {
-      throw new Error('Client wallet not configured. Set CLIENT_PRIVATE_KEY in .env');
+      throw new Error('Client wallet not configured. Set EVM_CLIENT_PRIVATE_KEY in .env');
     }
 
     // Step 1: Send initial request
@@ -186,19 +208,22 @@ export class TestClient {
     }
 
     // Step 2: Process payment requirement
-    console.log('\n=== STEP 2: Processing Payment ===');
+    console.log('\n=== STEP 2: Processing Payment (x402 v2) ===');
     const paymentRequired = initialResponse.x402;
+    console.log(`x402 Version: ${paymentRequired.x402Version || 2}`);
     console.log(`Payment options: ${paymentRequired.accepts.length}`);
-    console.log(`First option: ${paymentRequired.accepts[0].asset} on ${paymentRequired.accepts[0].network}`);
-    console.log(`Amount: ${paymentRequired.accepts[0].maxAmountRequired} (micro units)`);
+    
+    const firstOption = paymentRequired.accepts[0];
+    console.log(`First option: ${firstOption.asset} on ${firstOption.network}`);
+    console.log(`Amount: ${firstOption.amount || firstOption.maxAmountRequired} (micro units)`);
 
     try {
       // Process the payment (sign it)
-      console.log('🔐 Signing payment...');
+      console.log('🔐 Signing payment with EIP-712...');
       const paymentPayload = await createPaymentPayload(paymentRequired, this.wallet);
       console.log('✅ Payment signed successfully');
 
-      console.log(`Payment payload created for ${paymentPayload.network}`);
+      console.log(`Payment payload created for ${(paymentPayload as any).accepted?.network || 'network'}`);
 
       // Step 3: Submit payment with original message
       console.log('\n=== STEP 3: Submitting Payment ===');
@@ -261,6 +286,8 @@ export class TestClient {
     if (response.ok) {
       console.log('✅ Agent is healthy');
       console.log(`   Service: ${data.service}`);
+      console.log(`   Version: ${data.version}`);
+      console.log(`   x402 Version: ${data.x402Version || 'unknown'}`);
       console.log(`   Payment address: ${data.payment.address}`);
       console.log(`   Network: ${data.payment.network}`);
       console.log(`   Price: ${data.payment.price}`);
@@ -273,7 +300,7 @@ export class TestClient {
 }
 
 /**
- * Main test function that demonstrates the x402 payment flow.
+ * Main test function that demonstrates the x402 v2 payment flow.
  * 
  * This function runs two tests:
  * 1. Sends a request without payment to verify the agent returns payment requirements
@@ -282,14 +309,14 @@ export class TestClient {
  *    - Submitting the payment payload with the request
  *    - Receiving and displaying the AI agent's response after payment verification
  * 
- * The function showcases the complete x402 protocol flow from payment requirement
+ * The function showcases the complete x402 v2 protocol flow from payment requirement
  * discovery through payment submission and settlement.
  */
 async function main() {
-  console.log('🧪 x402 AI Agent Test Client');
+  console.log('🧪 x402 v2 AI Agent Test Client');
   console.log('================================\n');
 
-  const client = new TestClient(CLIENT_PRIVATE_KEY);
+  const client = new TestClient(EVM_CLIENT_PRIVATE_KEY);
 
   // Check agent health
   await client.checkHealth();
@@ -300,7 +327,8 @@ async function main() {
   try {
     const response = await client.sendRequest('What is 2+2?');
     if (response.x402) {
-      console.log('✅ Correctly received payment requirement');
+      console.log('✅ Correctly received payment requirement (x402 v2)');
+      console.log(`   x402 Version: ${response.x402.x402Version || 'unknown'}`);
     } else {
       console.log('❌ Expected payment requirement');
     }
@@ -309,7 +337,7 @@ async function main() {
   }
 
   // Test 2: Request with payment (only if wallet configured)
-  if (CLIENT_PRIVATE_KEY) {
+  if (EVM_CLIENT_PRIVATE_KEY) {
     console.log('\n\n📋 TEST 2: Request with payment');
     console.log('=====================================');
     try {
@@ -324,6 +352,12 @@ async function main() {
           .join(' ');
         console.log(aiResponse);
         console.log('-----------------------------------');
+        
+        if (response.settlement?.transaction) {
+          console.log(`\n💰 Payment settled!`);
+          console.log(`   Transaction: ${response.settlement.transaction}`);
+          console.log(`   Network: ${response.settlement.network}`);
+        }
       } else {
         console.log('❌ Request failed:', response.error);
       }
@@ -331,9 +365,9 @@ async function main() {
       console.error('❌ Test 2 failed:', error);
     }
   } else {
-    console.log('\n\n⚠️  TEST 2: Skipped (no CLIENT_PRIVATE_KEY configured)');
+    console.log('\n\n⚠️  TEST 2: Skipped (no EVM_CLIENT_PRIVATE_KEY configured)');
     console.log('=====================================');
-    console.log('To test with payment, set CLIENT_PRIVATE_KEY in .env');
+    console.log('To test with payment, set EVM_CLIENT_PRIVATE_KEY in .env');
     console.log('This wallet needs:');
     console.log('  - USDC tokens (testnet or mainnet)');
     console.log('  - USDC approval for transfers');
