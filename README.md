@@ -1,32 +1,32 @@
 # x402 Payment Gateway
 
-This focuses on building/serving paid APIs using x402 v2, with explicit support for both EVM and Solana.
+A reference implementation for building and serving paid APIs using x402 v2, with support for both EVM and Solana networks.
 
 ## Overview
 
-This demonstrates how to build paid APIs using x402 v2. It:
+This project demonstrates how to:
 
-1. Receives API requests
-2. Requires payment (in this example of $0.10 USDC) before processing
-3. Verifies and settles payments through a facilitator (default: [https://x402.org/facilitator](https://docs.cdp.coinbase.com/x402/network-support#x402-org-facilitator) for testnets, or your own local facilitator for mainnets)
-4. Processes requests (using OpenAI/EigenAI as configurable examples)
-5. Returns responses after payment is confirmed
+1. Receive API requests
+2. Require payment (for example, $0.10 USDC) before processing
+3. Verify and settle payments through a facilitator (default: `https://x402.org/facilitator` for testnets, or a custom facilitator for mainnets)
+4. Process requests using a pluggable backend (examples: OpenAI, EigenAI)
+5. Return responses after payment has been confirmed
 
 ## Architecture
 
-The API consists of four main components:
+The API is composed of four main components:
 
-- **ExampleService**: Example service logic that processes requests using OpenAI or EigenAI (replace with your own service implementation)
-- **MerchantExecutor**: Handles payment requirements, verification, and settlement (supports both EVM and Solana)
-- **Server**: Express HTTP server that orchestrates payment validation and request processing
-- **Facilitator** (optional): Facilitator server for mainnet support or custom networks
+- **ExampleService**: Example request-processing logic using OpenAI or EigenAI, intended to be replaced with your own service implementation.
+- **MerchantExecutor**: Handles payment requirements, verification, and settlement (supports both EVM and Solana).
+- **Server**: Express HTTP server that orchestrates payment validation and request processing.
+- **Facilitator** (optional): Facilitator server for mainnet or custom network support.
 
 ## Prerequisites
 
 - Node.js 18 or higher
 - A wallet address to receive USDC payments
-- An OpenAI or EigenAI API key (for the example implementation - replace with your own API)
-- For testing: A wallet with USDC and gas tokens on your chosen network
+- An OpenAI or EigenAI API key (used by the example service; can be replaced with your own API)
+- For testing: a wallet funded with USDC and gas tokens on the selected network
 
 ## Setup
 
@@ -52,7 +52,7 @@ Edit `.env` and fill in your values:
 # =============================================================================
 PORT=3000
 
-# Your wallet address to receive payments (no private key needed!)
+# Your wallet address to receive payments (no private key needed)
 PAY_TO_ADDRESS=0xYourWalletAddress
 
 # Network to use for payments
@@ -107,58 +107,56 @@ SETTLEMENT_MODE=facilitator
 
 ## Quickstart
 
-### For Testnets (Simple)
+### Testnets (Default Facilitator)
 
-Just run the server - it uses the default facilitator automatically:
+For testnet usage, start the server. It will use the default facilitator at `https://x402.org/facilitator`:
 
 ```bash
 npm run dev
 ```
 
-### For Mainnets (Requires Custom Facilitator)
+### Mainnets (Custom Facilitator Recommended)
 
-The default facilitator at `https://x402.org/facilitator` only supports **testnets**. For mainnet, you need a facilitator that supports your network - this can be a local facilitator you run yourself, or an external hosted facilitator service.
+The default facilitator at `https://x402.org/facilitator` supports testnets only. For mainnet usage, configure a facilitator that supports your target network. This can be a locally run facilitator or an external facilitator service.
 
-#### Option 1: Run Your Own Facilitator
+#### Option 1: Run a Local Facilitator
 
+**Terminal 1 – Facilitator:**
 
-**Terminal 1 - Start the Facilitator:**
 ```bash
 npm run start:facilitator
 ```
 
-**Terminal 2 - Start the Server:**
+**Terminal 2 – Server:**
+
 ```bash
 FACILITATOR_URL=http://localhost:4022 npm run start
 ```
 
 #### Option 2: Use an External Facilitator
 
-If you have access to a hosted facilitator that supports mainnet:
+If you have access to a hosted facilitator that supports your network:
 
 ```bash
 FACILITATOR_URL=https://your-mainnet-facilitator.example.com npm run start
 ```
 
-**Note:** Some facilitators do not require API keys to get started. For example, PayAI, x402rs, Heurist, Corbits, and other public facilitators can be used without additional authentication.
+Some public facilitators that do not require an API key:
 
-**Some Available Facilitators (No API key required):**
-
-- [PayAI](https://facilitator.payai.network)
-- [x402rs](https://facilitator.x402.rs)
-- [Heurist](https://facilitator.heurist.xyz)
-- [Corbits](https://facilitator.corbits.dev)
+- `https://facilitator.payai.network`
+- `https://facilitator.x402.rs`
+- `https://facilitator.heurist.xyz`
+- `https://facilitator.corbits.dev`
 
 #### Option 3: Direct Settlement (EVM Only)
 
-Skip the facilitator entirely and settle directly on-chain (requires merchant private key):
+For EVM networks, you can bypass a facilitator and settle payments directly on-chain (requires the merchant's private key):
 
 ```bash
 SETTLEMENT_MODE=direct PRIVATE_KEY=0xYourMerchantKey npm run start
-
 ```
 
-### Running Tests
+## Running Tests
 
 ```bash
 # Test EVM payments
@@ -170,78 +168,78 @@ npm run test:solana
 
 ## Available Scripts
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Build and start the server |
-| `npm run start` | Start the server (production) |
-| `npm run start:facilitator` | Start the local facilitator |
-| `npm run build` | Build TypeScript |
-| `npm run test` | Run EVM test client |
-| `npm run test:solana` | Run Solana test client |
-| `npm run setup:solana` | Setup Solana wallets (create ATAs) |
-| `npm run clean` | Remove build artifacts |
+| Script                      | Description                        |
+|-----------------------------|------------------------------------|
+| `npm run dev`               | Build and start the server         |
+| `npm run start`             | Start the server (production)      |
+| `npm run start:facilitator` | Start the local facilitator        |
+| `npm run build`             | Build TypeScript                   |
+| `npm run test`              | Run EVM test client                |
+| `npm run test:solana`       | Run Solana test client             |
+| `npm run setup:solana`      | Set up Solana wallets (ATAs)       |
+| `npm run clean`             | Remove build artifacts             |
 
-## Environment Variables Reference
+## Environment Variables
 
 ### Server (Merchant)
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PORT` | No | Server port (default: 3000) |
-| `PAY_TO_ADDRESS` | Yes | Wallet address to receive payments |
-| `NETWORK` | No | Network for payments (default: base-sepolia) |
-| `SETTLEMENT_MODE` | No | `facilitator` (default) or `direct` |
-| `FACILITATOR_URL` | No | Custom facilitator URL |
-| `PRIVATE_KEY` | For direct mode | Merchant key for direct settlement |
+| Variable          | Required        | Description                                   |
+|-------------------|-----------------|-----------------------------------------------|
+| `PORT`            | No              | Server port (default: 3000)                   |
+| `PAY_TO_ADDRESS`  | Yes             | Wallet address to receive payments           |
+| `NETWORK`         | No              | Payment network (default: `base-sepolia`)     |
+| `SETTLEMENT_MODE` | No              | `facilitator` (default) or `direct`          |
+| `FACILITATOR_URL` | No              | Custom facilitator URL                       |
+| `PRIVATE_KEY`     | For direct mode | Merchant key for direct settlement (EVM only) |
 
 ### AI Provider
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `AI_PROVIDER` | No | `openai` (default) or `eigenai` |
-| `OPENAI_API_KEY` | For OpenAI | OpenAI API key |
-| `EIGENAI_API_KEY` | For EigenAI | EigenAI API key |
-| `AI_MODEL` | No | Model to use |
-| `AI_TEMPERATURE` | No | Temperature setting |
-| `AI_MAX_TOKENS` | No | Max tokens |
+| Variable          | Required     | Description                      |
+|-------------------|--------------|----------------------------------|
+| `AI_PROVIDER`     | No           | `openai` (default) or `eigenai` |
+| `OPENAI_API_KEY`  | For OpenAI   | OpenAI API key                  |
+| `EIGENAI_API_KEY` | For EigenAI  | EigenAI API key                 |
+| `AI_MODEL`        | No           | Model identifier to use        |
+| `AI_TEMPERATURE`  | No           | Temperature setting            |
+| `AI_MAX_TOKENS`   | No           | Maximum tokens per response    |
 
 ### Test Clients
 
-| Variable | Description |
-|----------|-------------|
-| `EVM_CLIENT_PRIVATE_KEY` | EVM wallet for test payments |
-| `SOLANA_CLIENT_PRIVATE_KEY` | Solana wallet for test payments |
-| `AGENT_URL` | Server URL (default: http://localhost:3000) |
+| Variable                    | Description                          |
+|-----------------------------|--------------------------------------|
+| `EVM_CLIENT_PRIVATE_KEY`    | EVM wallet for test payments         |
+| `SOLANA_CLIENT_PRIVATE_KEY` | Solana wallet for test payments     |
+| `AGENT_URL`                 | Server URL (default: `http://localhost:3000`) |
 
 ### Local Facilitator
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `FACILITATOR_PORT` | No | Facilitator port (default: 4022) |
-| `EVM_PRIVATE_KEY` | Yes | EVM key for settling payments |
-| `SVM_PRIVATE_KEY` | Yes | Solana key for settling payments |
-| `FACILITATOR_EVM_NETWORK` | No | EVM network (default: base-sepolia) |
-| `FACILITATOR_SVM_NETWORK` | No | Solana network (default: solana-devnet) |
+| Variable                  | Required | Description                                     |
+|---------------------------|----------|-------------------------------------------------|
+| `FACILITATOR_PORT`        | No       | Facilitator port (default: 4022)               |
+| `EVM_PRIVATE_KEY`         | Yes      | EVM key used by facilitator to settle payments |
+| `SVM_PRIVATE_KEY`         | Yes      | Solana key used by facilitator                 |
+| `FACILITATOR_EVM_NETWORK` | No       | EVM network (default: `base-sepolia`)          |
+| `FACILITATOR_SVM_NETWORK` | No       | Solana network (default: `solana-devnet`)      |
 
 ## Network Support
 
 ### Testnets (Default Facilitator)
 
-| Network | Config Value | Supported |
-|---------|-------------|-----------|
-| Base Sepolia | `base-sepolia` | ✅ |
-| Polygon Amoy | `polygon-amoy` | ✅ |
-| Avalanche Fuji | `avalanche-fuji` | ✅ |
-| Solana Devnet | `solana-devnet` | ✅ |
+| Network        | Config Value     | Supported |
+|----------------|------------------|-----------|
+| Base Sepolia   | `base-sepolia`   | Yes       |
+| Polygon Amoy   | `polygon-amoy`   | Yes       |
+| Avalanche Fuji | `avalanche-fuji` | Yes       |
+| Solana Devnet  | `solana-devnet`  | Yes       |
 
-### Mainnets (Requires Custom Facilitator or Direct Settlement)
+### Mainnets (Custom Facilitator or Direct Settlement)
 
-| Network | Config Value | Custom Facilitator | Direct Settlement |
-|---------|-------------|-------------------|-------------------|
-| Base | `base` | ✅ | ✅ |
-| Polygon | `polygon` | ✅ | ✅ |
-| Avalanche | `avalanche` | ✅ | ✅ |
-| Solana | `solana` | ✅ | ❌ |
+| Network   | Config Value | Custom Facilitator | Direct Settlement |
+|-----------|--------------|--------------------|-------------------|
+| Base      | `base`       | Yes                | Yes               |
+| Polygon   | `polygon`    | Yes                | Yes               |
+| Avalanche | `avalanche`  | Yes                | Yes               |
+| Solana    | `solana`     | Yes                | No                |
 
 ## Usage
 
@@ -251,7 +249,8 @@ npm run test:solana
 curl http://localhost:3000/health
 ```
 
-Response:
+Example response:
+
 ```json
 {
   "status": "healthy",
@@ -266,7 +265,7 @@ Response:
 }
 ```
 
-### Making a Request
+### Example Request
 
 ```bash
 curl -X POST http://localhost:3000/process \
@@ -278,11 +277,9 @@ curl -X POST http://localhost:3000/process \
   }'
 ```
 
-This returns payment requirements. To complete the flow, use the test clients or implement x402 payment signing.
+The server returns payment requirements. To complete the flow, use the provided test clients or implement x402 payment signing in your client.
 
-## How It Works
-
-### Payment Flow
+## Payment Flow
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
@@ -306,28 +303,28 @@ This returns payment requirements. To complete the flow, use the test clients or
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
-### Key Roles
+### Roles
 
-| Role | What They Need | Purpose |
-|------|---------------|---------|
-| **Client (Payer)** | Private key + USDC | Signs payment authorization |
-| **Server (Payee)** | Just an address | Receives USDC payments |
-| **Facilitator** | Private key + gas | Settles transactions on-chain |
+| Role              | Requirements              | Purpose                        |
+|-------------------|---------------------------|--------------------------------|
+| Client (Payer)    | Private key + USDC        | Signs payment authorization    |
+| Server (Payee)    | Wallet address only       | Receives USDC payments         |
+| Facilitator       | Private key + gas tokens  | Settles transactions on-chain |
 
 ## Project Structure
 
 ```
 x402-starter/
 ├── src/
-│   ├── server.ts              # Express server and endpoints
-│   ├── ExampleService.ts      # Example AI service (replace with your own)
-│   ├── MerchantExecutor.ts    # Payment verification & settlement
-│   ├── facilitator.ts         # Local facilitator server
-│   ├── testClient.ts          # EVM test client
-│   ├── testClientSolana.ts    # Solana test client
+│   ├── server.ts               # Express server and endpoints
+│   ├── ExampleService.ts       # Example AI service
+│   ├── MerchantExecutor.ts     # Payment verification & settlement
+│   ├── facilitator.ts          # Local facilitator server
+│   ├── testClient.ts           # EVM test client
+│   ├── testClientSolana.ts     # Solana test client
 │   ├── setupSolanaWallets.ts   # Solana wallet setup tool
-│   └── x402Types.ts           # Shared types
-├── env.example                # Example environment configuration
+│   └── x402Types.ts            # Shared types
+├── env.example                 # Example environment configuration
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -337,82 +334,84 @@ x402-starter/
 
 ### "PAY_TO_ADDRESS is required"
 
-Set `PAY_TO_ADDRESS` in your `.env` file to your wallet address.
+Set `PAY_TO_ADDRESS` in `.env` to your wallet address.
 
 ### "OPENAI_API_KEY is required"
 
-Set `OPENAI_API_KEY` in your `.env` file, or use `AI_PROVIDER=eigenai` with `EIGENAI_API_KEY`.
+Set `OPENAI_API_KEY` in `.env`, or use `AI_PROVIDER=eigenai` with `EIGENAI_API_KEY`.
 
-### Payment verification fails
+### Payment Verification Fails
 
-- Check you're using the correct network
-- Verify the client wallet has USDC
-- For facilitator mode, ensure the facilitator is running and reachable
-- For direct mode, ensure `PRIVATE_KEY` has gas tokens
+- Confirm the configured network matches the client's network.
+- Verify the client wallet has sufficient USDC.
+- For facilitator mode, ensure the facilitator is running and reachable.
+- For direct mode, ensure the `PRIVATE_KEY` has enough gas tokens.
 
 ### "Default facilitator only supports TESTNETS"
 
-For mainnets, you need to:
-1. Run your own facilitator: `npm run start:facilitator`, or
+For mainnet networks, either:
+
+1. Run a local facilitator: `npm run start:facilitator`, or
 2. Use an external facilitator that supports mainnet, or
-3. Use direct settlement (EVM only): `SETTLEMENT_MODE=direct`
+3. Use direct settlement (EVM only): `SETTLEMENT_MODE=direct`.
 
-### Solana payments not working
+### Solana Payments
 
-- Ensure server is configured with `NETWORK=solana-devnet` or `NETWORK=solana`
-- For mainnet, use a facilitator with `SVM_PRIVATE_KEY` configured
-- Client needs `SOLANA_CLIENT_PRIVATE_KEY` with USDC + SOL for fees
+- Ensure `NETWORK` is set to `solana-devnet` or `solana`.
+- For mainnet, use a facilitator configured with `SVM_PRIVATE_KEY`.
+- The client must have `SOLANA_CLIENT_PRIVATE_KEY` funded with USDC and SOL for fees.
 
 ### Solana Wallet Setup
 
-Solana requires **Associated Token Accounts (ATAs)** for each wallet to hold USDC. Unlike EVM, you can't just send tokens to any address - the receiving account must exist first.
+Solana uses Associated Token Accounts (ATAs) for token holdings. Each wallet must have an ATA for USDC before receiving tokens.
 
-Run the setup tool to check and create missing ATAs:
+Run:
 
 ```bash
 npm run setup:solana
 ```
 
-This will:
-1. Check SOL balance for all configured wallets
-2. Check if USDC ATAs exist
-3. Automatically create missing ATAs (if a funded wallet is available)
-4. Show helpful instructions for any issues
+The tool will:
 
-**Required wallets for Solana payments:**
+1. Check SOL balance for configured wallets
+2. Check for existing USDC ATAs
+3. Create missing ATAs where possible (if a funded wallet is available)
+4. Provide guidance for any remaining issues
 
-| Wallet | Needs ATA? | Needs USDC? | Needs SOL? |
-|--------|------------|-------------|------------|
-| Client | ✅ Yes | ✅ Yes (to pay) | ✅ Minimal |
-| Merchant | ✅ Yes | ❌ No | ✅ Minimal |
-| Facilitator | ✅ Yes | ❌ No | ✅ Yes (for tx fees) |
+Required wallets for Solana payments:
 
-**Getting devnet tokens:**
+| Wallet      | Needs ATA? | Needs USDC? | Needs SOL? |
+|------------|------------|-------------|------------|
+| Client     | Yes        | Yes         | Yes        |
+| Merchant   | Yes        | No          | Yes        |
+| Facilitator| Yes        | No          | Yes        |
+
+Devnet tokens:
+
 - SOL: https://faucet.solana.com
 - USDC: https://spl-token-faucet.com
 
+## Security
 
-## Security Considerations
-
-- Never commit your `.env` file
-- Keep private keys secure
-- Use testnet for development
-- The merchant (server) only needs an address - no private key required to receive payments
-- Facilitator keys should be separate from merchant keys
+- Do not commit the `.env` file.
+- Keep private keys secure and separate for facilitator and merchant where appropriate.
+- Prefer testnets for development and testing.
+- The merchant server only requires an address to receive payments when using a facilitator.
+- Facilitator keys should be isolated and treated as operational keys.
 
 ## Next Steps
 
-- Replace the example OpenAI service with your own API logic
-- Deploy the facilitator for mainnet payments
-- Add support for different payment tiers
-- Implement caching and rate limiting
-- Add monitoring and analytics
+- Replace the example OpenAI/EigenAI service with your own application logic.
+- Deploy a facilitator for mainnet usage.
+- Add support for multiple pricing tiers.
+- Add caching, rate limiting, and monitoring.
+- Integrate logging and analytics appropriate for your environment.
 
 ## License
 
 MIT
 
-## Resources
+## References
 
 - [x402 Protocol Documentation](https://docs.cdp.coinbase.com/x402)
 - [@x402/core on npm](https://www.npmjs.com/package/@x402/core)
