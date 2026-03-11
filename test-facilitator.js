@@ -80,7 +80,7 @@ async function createPaymentPayload(paymentRequired, wallet) {
 }
 
 async function testFacilitator() {
-  console.log('🧪 Testing Facilitator Communication');
+  console.log('🧪 Testing Facilitator');
   console.log('====================================\n');
 
   if (!CLIENT_PRIVATE_KEY) {

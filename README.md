@@ -1,12 +1,10 @@
-![x402 Starter Kit](header.jpg)
+# x402 Payment Gateway
 
-# x402 Starter Kit
-
-A starter kit for building paid APIs using the x402 v2 payment protocol with support for both EVM and Solana networks.
+This focuses on building/serving paid APIs using x402 v2, with explicit support for both EVM and Solana.
 
 ## Overview
 
-This starter kit demonstrates how to build paid APIs using x402 v2. It:
+This demonstrates how to build paid APIs using x402 v2. It:
 
 1. Receives API requests
 2. Requires payment (in this example of $0.10 USDC) before processing
